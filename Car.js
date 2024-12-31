@@ -30,8 +30,9 @@ class Car {
     static RAY_COLOR = [255, 165, 0, 128]; // Orange with 50% transparency
 
 
-    constructor(world, debug = false) {
-        this.world = world;
+    constructor(gameWorld, debug = false) {
+        this.gameWorld = gameWorld;
+        this.world = gameWorld.getPhysicsWorld();
         this.debug = debug;
         this.carBodyImage = null;
         this.carWheelImage = null;
@@ -197,8 +198,8 @@ class Car {
     }
 
     moveViewToCar() {
-        translate(CANVAS_WIDTH / (2 * SCALE_FACTOR) - this.chassisBody.position[0],
-            CANVAS_HEIGHT / (2 * SCALE_FACTOR) - this.chassisBody.position[1]);
+        translate(GameWorld.CANVAS_WIDTH / (2 * this.gameWorld.getScaleFactor()) - this.chassisBody.position[0],
+            GameWorld.CANVAS_HEIGHT / (2 * this.gameWorld.getScaleFactor()) - this.chassisBody.position[1]);
     }
 
     draw() {
@@ -230,8 +231,8 @@ class Car {
 
     drawCarMetrics() {
         // Base text size that scales with zoom level
-        const baseTextSize = 0.8 * (30 / SCALE_FACTOR); // Scales inversely with zoom
-        const padding = 1 * (30 / SCALE_FACTOR); // Padding that scales with zoom
+        const baseTextSize = 0.8 * (30 / this.gameWorld.getScaleFactor()); // Scales inversely with zoom
+        const padding = 1 * (30 / this.gameWorld.getScaleFactor()); // Padding that scales with zoom
 
         push();
         fill(255);
@@ -240,8 +241,8 @@ class Car {
         textSize(baseTextSize);
 
         // Calculate screen bounds in physics units
-        const viewWidth = CANVAS_WIDTH / SCALE_FACTOR;
-        const viewHeight = CANVAS_HEIGHT / SCALE_FACTOR;
+        const viewWidth = GameWorld.CANVAS_WIDTH / this.gameWorld.getScaleFactor();
+        const viewHeight = GameWorld.CANVAS_HEIGHT / this.gameWorld.getScaleFactor();
 
         // Calculate positions relative to car's position
         const screenLeft = this.chassisBody.position[0] - viewWidth / 2;
@@ -260,7 +261,7 @@ class Car {
 
             // Draw checkpoint times in a grid
             textSize(baseTextSize);
-            const columnWidth = 6 * (30 / SCALE_FACTOR); // Scale column width with zoom
+            const columnWidth = 6 * (30 / this.gameWorld.getScaleFactor()); // Scale column width with zoom
             const rowHeight = baseTextSize * 1.5;
             const columnsCount = Math.min(4, Math.ceil(Math.sqrt(this.checkpointTimes.length)));
 
@@ -377,7 +378,7 @@ class Car {
     drawRays() {
         push();
         stroke(...Car.RAY_COLOR); // Semi-transparent orange color
-        strokeWeight(2 / SCALE_FACTOR); // Adjust line thickness based on zoom
+        strokeWeight(2 / this.gameWorld.getScaleFactor()); // Use gameWorld's scale factor
 
         this.rays.forEach((ray, index) => {
             const hitX = ray.start[0] + (ray.end[0] - ray.start[0]) * ray.fraction;

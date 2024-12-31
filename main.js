@@ -1,18 +1,26 @@
 // Debug flag
 const DEBUG = true;
-const track = new Track(world, DEBUG);
-let car; // Declare car variable
+let gameWorld;
+let track;
+let car;
 
 function setup() {
-    createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+    createCanvas(GameWorld.CANVAS_WIDTH, GameWorld.CANVAS_HEIGHT);
     background(100);
+
+    // Initialize game world
+    gameWorld = new GameWorld();
+
+    // Load assets
     CAR_BODY_IMAGE = loadImage(Car.CAR_BODY_IMAGE_PATH);
     CAR_WHEEL_IMAGE = loadImage(Car.CAR_WHEEL_IMAGE_PATH);
-    GRASS_IMAGE = loadImage(GRASS_IMAGE_PATH);
+    gameWorld.loadAssets();
+
+    // Initialize track and car
+    track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
     track.setup();
 
-    // Create car instance
-    car = new Car(world, DEBUG);
+    car = new Car(gameWorld, DEBUG);
     car.setTotalCheckpoints(track.getTotalCheckpoints());
 }
 
@@ -24,16 +32,16 @@ function draw() {
     );
 
     // Update scale factor based on speed and race state
-    updateScaleFactor(carSpeed, car.raceFinished);
+    gameWorld.updateScaleFactor(carSpeed, car.raceFinished);
 
     // Step the physics world
-    world.step(1 / 60);
+    gameWorld.step();
 
     push();
-    scale(SCALE_FACTOR);
+    scale(gameWorld.getScaleFactor());
 
     car.moveViewToCar();
-    drawGrass();
+    gameWorld.drawGrass();
 
     track.draw();
     car.draw();
