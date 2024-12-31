@@ -457,7 +457,6 @@ class Track {
     }
 
     createLineBody(position, angle = 0, group = Track.CHECKPOINT_GROUP) {
-        console.log('Creating line body', position.x, position.y, angle, group);
         const p2line = new p2.Body({
             mass: 0,
             position: [position.x, position.y],

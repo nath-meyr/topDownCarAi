@@ -3,7 +3,10 @@ let GRASS_IMAGE = null;
 // Canvas dimensions
 const CANVAS_HEIGHT = window.innerHeight;
 const CANVAS_WIDTH = window.innerWidth;
-const SCALE_FACTOR = 20;
+const MIN_SCALE_FACTOR = 25;
+const MAX_SCALE_FACTOR = 35;
+const SCALE_SPEED_FACTOR = 0.5; // How much speed affects zoom (lower = more dramatic)
+let SCALE_FACTOR = 100;
 const PHYSICS_HEIGHT = CANVAS_HEIGHT / SCALE_FACTOR;
 const PHYSICS_WIDTH = CANVAS_WIDTH / SCALE_FACTOR;
 
@@ -16,54 +19,21 @@ const WALL_OPTIONS = {
     collisionResponse: true
 };
 
+const wallMultiplier = 25;
 const outsideWalls = {
-    width: 100 * PHYSICS_WIDTH,
-    height: 100 * PHYSICS_HEIGHT
+    width: wallMultiplier * PHYSICS_WIDTH,
+    height: wallMultiplier * PHYSICS_HEIGHT
 };
 // Create a World
 const world = new p2.World({
     gravity: [0, 0],
 });
 
-// Create walls
-const wallConfigs = [
-    // [width, height, x, y, angle, angleCenter]
-    [outsideWalls.width, WALL_THICKNESS, 0, -(outsideWalls.height) / 2, 0],    // Top
-    [outsideWalls.width, WALL_THICKNESS, 0, (outsideWalls.height) / 2, 0],     // Bottom  
-    [WALL_THICKNESS, outsideWalls.height, -(outsideWalls.width) / 2, 0, 0],    // Left
-    [WALL_THICKNESS, outsideWalls.height, (outsideWalls.width) / 2, 0, 0],     // Right
-
-    // Diagonal walls for corners
-    // Top-left diagonal
-    [WALL_THICKNESS * 4, WALL_THICKNESS, -(outsideWalls.width) / 2 + 0.3, -(outsideWalls.height) / 2 + 0.3, -45, 1],
-    // Top-right diagonal  
-    [WALL_THICKNESS * 4, WALL_THICKNESS, (outsideWalls.width) / 2 - 0.3, -(outsideWalls.height) / 2 + 0.3, 45, 1],
-    // Bottom-left diagonal
-    [WALL_THICKNESS * 4, WALL_THICKNESS, -(outsideWalls.width) / 2 + 0.3, (outsideWalls.height) / 2 - 0.3, 45, 1],
-    // Bottom-right diagonal
-    [WALL_THICKNESS * 4, WALL_THICKNESS, (outsideWalls.width) / 2 - 0.3, (outsideWalls.height) / 2 - 0.3, -45, 1]
-];
-
-const walls = wallConfigs.map(([width, height, x, y, angle, angleCenter = 0]) => {
-    const wall = new p2.Body(WALL_OPTIONS);
-    wall.addShape(new p2.Box({ width, height }));
-    wall.position[0] = x;
-    wall.position[1] = y;
-    if (angleCenter) {
-        wall.angle = angle * Math.PI / 180; // Convert angle to radians and rotate around center
-    } else {
-        wall.angle = angle; // Convert angle to radians and rotate around center
-    }
-    world.addBody(wall);
-    return wall;
-});
-
-
 function drawGrass() {
     // Draw repeating grass background
     const grassSize = 10; // Size of grass tile in pixels
-    const numTilesX = Math.ceil(10 * PHYSICS_WIDTH / grassSize); // 10x wider
-    const numTilesY = Math.ceil(10 * PHYSICS_HEIGHT / grassSize); // 10x taller
+    const numTilesX = Math.ceil(outsideWalls.width / grassSize); // 10x wider
+    const numTilesY = Math.ceil(outsideWalls.height / grassSize); // 10x taller
     const startX = -numTilesX * grassSize / 2;
     const startY = -numTilesY * grassSize / 2;
     // Create a deterministic random value based on x,y coordinates
@@ -85,26 +55,6 @@ function drawGrass() {
 
 }
 
-function drawOutsideWalls() {
-
-    // Draw walls
-    stroke(255, 0, 0);
-    fill(200, 0, 0);
-    strokeWeight(1 / SCALE_FACTOR);
-
-    for (const wall of walls) {
-        beginShape();
-        const vertices = wall.shapes[0].vertices;
-        for (let i = 0; i < vertices.length; i++) {
-            const worldPoint = p2.vec2.create();
-            wall.toWorldFrame(worldPoint, vertices[i]);
-            vertex(worldPoint[0], worldPoint[1]);
-        }
-        endShape(CLOSE);
-    }
-
-}
-
 function drawPointGrid() {
     // Draw grid points with alternating shades of gray
     strokeWeight(0.5);
@@ -119,4 +69,25 @@ function drawPointGrid() {
         }
     }
 
+}
+
+// Add these constants at the top with other scale constants
+const BASE_SCALE_FACTOR = 10;
+const SCALE_TRANSITION_SPEED = 0.03;
+
+// Modify the updateScaleFactor function
+function updateScaleFactor(carSpeed, isRaceFinished) {
+    let targetScale;
+
+    if (isRaceFinished) {
+        // When race is finished, return to base scale
+        targetScale = BASE_SCALE_FACTOR;
+    } else {
+        // Normal racing zoom based on speed
+        targetScale = MAX_SCALE_FACTOR - (carSpeed * SCALE_SPEED_FACTOR);
+        targetScale = Math.max(MIN_SCALE_FACTOR, Math.min(MAX_SCALE_FACTOR, targetScale));
+    }
+
+    // Smooth transition to target scale
+    SCALE_FACTOR = SCALE_FACTOR + (targetScale - SCALE_FACTOR) * SCALE_TRANSITION_SPEED;
 }

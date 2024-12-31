@@ -1,280 +1,321 @@
-let CAR_BODY_IMAGE = null;
-let CAR_WHEEL_IMAGE = null;
-// Asset paths
-const CAR_BODY_IMAGE_PATH = 'assets/f1_no_f_wheels.png';
-const CAR_WHEEL_IMAGE_PATH = 'assets/f1_wheel.png';
+class Car {
+    // Asset paths
+    static CAR_BODY_IMAGE_PATH = 'assets/f1_no_f_wheels.png';
+    static CAR_WHEEL_IMAGE_PATH = 'assets/f1_wheel.png';
 
-// Vehicle constants
-const CHASSIS_MASS = 1;
-const CHASSIS_WIDTH = 0.54;
-const CHASSIS_HEIGHT = 1.04;
-const FRONT_WHEEL_POSITION = [0, 0.5];
-const BACK_WHEEL_POSITION = [0, -0.5];
-const FRONT_WHEEL_FRICTION = 6;
-const BACK_WHEEL_FRICTION = 6;
-const FORWARD_ENGINE_FORCE = 7;
-const REVERSE_ENGINE_FORCE = -2;
-const BRAKE_FORCE = 5;
-const COLLISION_DAMPING = 0.5;
+    // Vehicle constants
+    static CHASSIS_MASS = 1;
+    static CHASSIS_WIDTH = 0.54;
+    static CHASSIS_HEIGHT = 1.04;
+    static FRONT_WHEEL_POSITION = [0, 0.5];
+    static BACK_WHEEL_POSITION = [0, -0.5];
+    static FRONT_WHEEL_FRICTION = 6;
+    static BACK_WHEEL_FRICTION = 6;
+    static FORWARD_ENGINE_FORCE = 7;
+    static REVERSE_ENGINE_FORCE = -2;
+    static BRAKE_FORCE = 5;
+    static COLLISION_DAMPING = 0.5;
 
-// Wheel rendering constants
-const WHEEL_WIDTH = 0.14;
-const WHEEL_HEIGHT = 0.18;
-const WHEEL_OFFSET_X = 0.2;
-const WHEEL_OFFSET_Y = -0.20;
+    // Wheel rendering constants
+    static WHEEL_WIDTH = 0.14;
+    static WHEEL_HEIGHT = 0.18;
+    static WHEEL_OFFSET_X = 0.2;
+    static WHEEL_OFFSET_Y = -0.20;
 
-const MAX_STEER = Math.PI / 4;
+    static MAX_STEER = Math.PI / 4;
 
-// Timer variables
-let startTime = null;
-let raceTime = 0;
-let checkpointTimes = [];
-let hitCheckpoints = new Set(); // Track unique checkpoint hits
-let totalCheckpoints = 0; // Will store total number of checkpoints
-let allCheckpointsHit = false; // Flag for when all checkpoints are hit
-let raceFinished = false;
+    constructor(world) {
+        this.world = world;
+        this.carBodyImage = null;
+        this.carWheelImage = null;
 
-// Create a dynamic body for the chassis
-const chassisBody = new p2.Body({
-    mass: CHASSIS_MASS,
-    position: [0, 0],
-    angle: -90 * Math.PI / 180,
-});
-const boxShape = new p2.Box({
-    width: CHASSIS_WIDTH,
-    height: CHASSIS_HEIGHT,
-    collisionGroup: Track.COLLISION_GROUP.CAR,
-    // The car should collide with walls, checkpoints, start, and finish lines
-    collisionMask: Track.COLLISION_GROUP.WALL |
-        Track.COLLISION_GROUP.CHECKPOINT |
-        Track.COLLISION_GROUP.START |
-        Track.COLLISION_GROUP.FINISH
-});
-chassisBody.addShape(boxShape);
-world.addBody(chassisBody);
+        // Timer variables
+        this.startTime = null;
+        this.raceTime = 0;
+        this.checkpointTimes = [];
+        this.hitCheckpoints = new Set();
+        this.totalCheckpoints = 0;
+        this.allCheckpointsHit = false;
+        this.raceFinished = false;
 
-// Create the vehicle
-const vehicle = new p2.TopDownVehicle(chassisBody);
-const frontWheel = vehicle.addWheel({
-    localPosition: FRONT_WHEEL_POSITION,
-    sideFriction: FRONT_WHEEL_FRICTION,
-});
+        // Key controls
+        this.keys = {
+            '37': 0, // left
+            '39': 0, // right
+            '38': 0, // up
+            '40': 0  // down
+        };
 
-// Back wheel
-const backWheel = vehicle.addWheel({
-    localPosition: BACK_WHEEL_POSITION,
-    sideFriction: BACK_WHEEL_FRICTION,
-});
+        this.setupPhysics();
+        this.setupEventListeners();
+    }
 
-vehicle.addToWorld(world);
+    setupPhysics() {
+        // Create chassis body
+        this.chassisBody = new p2.Body({
+            mass: Car.CHASSIS_MASS,
+            position: [0, 0],
+            angle: -90 * Math.PI / 180,
+        });
 
+        this.boxShape = new p2.Box({
+            width: Car.CHASSIS_WIDTH,
+            height: Car.CHASSIS_HEIGHT,
+            collisionGroup: Track.COLLISION_GROUP.CAR,
+            collisionMask: Track.COLLISION_GROUP.WALL |
+                Track.COLLISION_GROUP.CHECKPOINT |
+                Track.COLLISION_GROUP.START |
+                Track.COLLISION_GROUP.FINISH
+        });
 
-// Add collision handler to reduce speed on impact and track checkpoints
-world.on('beginContact', (evt) => {
-    if ((evt.bodyA === chassisBody || evt.bodyB === chassisBody)) {
-        const otherBody = evt.bodyA === chassisBody ? evt.bodyB : evt.bodyA;
-        const otherShape = otherBody.shapes[0];
+        this.chassisBody.addShape(this.boxShape);
+        this.world.addBody(this.chassisBody);
 
-        // Check collision groups
-        if (otherShape.collisionGroup === Track.COLLISION_GROUP.CHECKPOINT) {
-            // Get checkpoint index from the body's userData
-            const checkpointIndex = otherBody.checkpointIndex;
+        // Create vehicle
+        this.vehicle = new p2.TopDownVehicle(this.chassisBody);
+        this.frontWheel = this.vehicle.addWheel({
+            localPosition: Car.FRONT_WHEEL_POSITION,
+            sideFriction: Car.FRONT_WHEEL_FRICTION,
+        });
 
-            // Only record time if we haven't hit this checkpoint before
-            if (!hitCheckpoints.has(checkpointIndex)) {
-                hitCheckpoints.add(checkpointIndex);
-                checkpointTimes.push(raceTime);
+        this.backWheel = this.vehicle.addWheel({
+            localPosition: Car.BACK_WHEEL_POSITION,
+            sideFriction: Car.BACK_WHEEL_FRICTION,
+        });
 
-                // Check if all checkpoints have been hit
-                if (hitCheckpoints.size === totalCheckpoints) {
-                    allCheckpointsHit = true;
+        this.vehicle.addToWorld(this.world);
+        this.setupCollisionHandler();
+    }
+
+    setupCollisionHandler() {
+        this.world.on('beginContact', (evt) => {
+            if ((evt.bodyA === this.chassisBody || evt.bodyB === this.chassisBody)) {
+                const otherBody = evt.bodyA === this.chassisBody ? evt.bodyB : evt.bodyA;
+                const otherShape = otherBody.shapes[0];
+
+                if (otherShape.collisionGroup === Track.COLLISION_GROUP.CHECKPOINT) {
+                    this.handleCheckpointCollision(otherBody.checkpointIndex);
+                } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.FINISH) {
+                    this.handleFinishCollision();
+                } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.WALL) {
+                    this.handleWallCollision();
                 }
             }
-            return;
-        } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.START) {
-            return;
-        } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.FINISH) {
-            // Only finish the race if all checkpoints have been hit
-            if (allCheckpointsHit && !raceFinished) {
-                raceFinished = true;
-                // Just stop engine and steering, but keep momentum
-                backWheel.engineForce = 0;
-                frontWheel.steerValue = 0;
+        });
+    }
+
+    handleCheckpointCollision(checkpointIndex) {
+        if (!this.hitCheckpoints.has(checkpointIndex)) {
+            this.hitCheckpoints.add(checkpointIndex);
+            this.checkpointTimes.push(this.raceTime);
+
+            if (this.hitCheckpoints.size === this.totalCheckpoints) {
+                this.allCheckpointsHit = true;
             }
-            return;
-        } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.WALL) {
-            // Handle wall collisions
-            chassisBody.velocity[0] *= COLLISION_DAMPING;
-            chassisBody.velocity[1] *= COLLISION_DAMPING;
-            chassisBody.angularVelocity *= COLLISION_DAMPING;
-            backWheel.engineForce = 0;
         }
     }
-});
 
-
-// Key controls
-const keys = {
-    '37': 0, // left
-    '39': 0, // right
-    '38': 0, // up
-    '40': 0 // down
-};
-
-// Event handlers
-function handleKeyDown(evt) {
-    // Start timer on first key press
-    if (startTime === null) {
-        startTime = Date.now();
-    }
-    keys[evt.keyCode] = 1;
-    updateVehicleControls();
-}
-
-function handleKeyUp(evt) {
-    keys[evt.keyCode] = 0;
-    updateVehicleControls();
-}
-
-// Add event listeners
-document.addEventListener("keydown", handleKeyDown);
-document.addEventListener("keyup", handleKeyUp);
-
-// Control update functions
-function updateSteering() {
-    frontWheel.steerValue = MAX_STEER * (keys[39] - keys[37]);
-}
-
-function updateEngineForce() {
-    backWheel.engineForce = keys[38] * FORWARD_ENGINE_FORCE;
-}
-
-function updateBraking() {
-    backWheel.setBrakeForce(0);
-    if (keys[40]) {
-        if (backWheel.getSpeed() > 0.1) {
-            // Moving forward - add some brake force to slow down
-            backWheel.setBrakeForce(BRAKE_FORCE);
-        } else {
-            // Moving backwards - reverse the engine force
-            backWheel.setBrakeForce(0);
-            backWheel.engineForce = REVERSE_ENGINE_FORCE;
+    handleFinishCollision() {
+        if (this.allCheckpointsHit && !this.raceFinished) {
+            this.raceFinished = true;
+            this.backWheel.engineForce = 0;
+            this.frontWheel.steerValue = 0;
         }
     }
-}
+    handleWallCollision() {
+        const speed = Math.sqrt(
+            this.chassisBody.velocity[0] * this.chassisBody.velocity[0] +
+            this.chassisBody.velocity[1] * this.chassisBody.velocity[1]
+        );
 
-function updateVehicleControls() {
-    if (!raceFinished) {
-        updateSteering();
-        updateEngineForce();
-        updateBraking();
+        if (speed > 0.1) {
+            this.chassisBody.velocity[0] *= Car.COLLISION_DAMPING;
+            this.chassisBody.velocity[1] *= Car.COLLISION_DAMPING;
+            this.chassisBody.angularVelocity *= Car.COLLISION_DAMPING;
+            this.backWheel.engineForce = 0;
+        }
     }
-}
 
-function moveViewToCar() {
-    // Center the view on the car
-    translate(CANVAS_WIDTH / (2 * SCALE_FACTOR) - chassisBody.position[0],
-        CANVAS_HEIGHT / (2 * SCALE_FACTOR) - chassisBody.position[1]);
-}
+    setupEventListeners() {
+        document.addEventListener("keydown", (evt) => this.handleKeyDown(evt));
+        document.addEventListener("keyup", (evt) => this.handleKeyUp(evt));
+    }
 
-function drawCar() {
-    // Draw chassis
-    push();
-    translate(chassisBody.position[0], chassisBody.position[1]);
-    rotate(chassisBody.angle + PI); // Add PI (180 degrees) to rotate the image
-    imageMode(CENTER);
-    image(CAR_BODY_IMAGE, 0, 0, boxShape.width, boxShape.height);
+    handleKeyDown(evt) {
+        if (this.startTime === null) {
+            this.startTime = Date.now();
+        }
+        this.keys[evt.keyCode] = 1;
+        this.updateVehicleControls();
+    }
 
-    // Draw front wheels
-    for (let side = -1; side <= 1; side += 2) {
+    handleKeyUp(evt) {
+        this.keys[evt.keyCode] = 0;
+        this.updateVehicleControls();
+    }
+
+    updateSteering() {
+        this.frontWheel.steerValue = Car.MAX_STEER * (this.keys[39] - this.keys[37]);
+    }
+
+    updateEngineForce() {
+        this.backWheel.engineForce = this.keys[38] * Car.FORWARD_ENGINE_FORCE;
+    }
+
+    updateBraking() {
+        this.backWheel.setBrakeForce(0);
+        if (this.keys[40]) {
+            if (this.backWheel.getSpeed() > 0.1) {
+                this.backWheel.setBrakeForce(Car.BRAKE_FORCE);
+            } else {
+                this.backWheel.setBrakeForce(0);
+                this.backWheel.engineForce = Car.REVERSE_ENGINE_FORCE;
+            }
+        }
+    }
+
+    updateVehicleControls() {
+        if (!this.raceFinished) {
+            this.updateSteering();
+            this.updateEngineForce();
+            this.updateBraking();
+        }
+    }
+
+    moveViewToCar() {
+        translate(CANVAS_WIDTH / (2 * SCALE_FACTOR) - this.chassisBody.position[0],
+            CANVAS_HEIGHT / (2 * SCALE_FACTOR) - this.chassisBody.position[1]);
+    }
+
+    draw() {
+        this.drawCar();
+        this.drawCarMetrics();
+    }
+
+    drawCar() {
         push();
-        translate(side * WHEEL_OFFSET_X, WHEEL_OFFSET_Y);
-        rotate(frontWheel.steerValue);
-        image(CAR_WHEEL_IMAGE, 0, 0, WHEEL_WIDTH, WHEEL_HEIGHT);
+        translate(this.chassisBody.position[0], this.chassisBody.position[1]);
+        rotate(this.chassisBody.angle + PI);
+        imageMode(CENTER);
+        image(CAR_BODY_IMAGE, 0, 0, this.boxShape.width, this.boxShape.height);
+
+        // Draw front wheels
+        for (let side = -1; side <= 1; side += 2) {
+            push();
+            translate(side * Car.WHEEL_OFFSET_X, Car.WHEEL_OFFSET_Y);
+            rotate(this.frontWheel.steerValue);
+            image(CAR_WHEEL_IMAGE, 0, 0, Car.WHEEL_WIDTH, Car.WHEEL_HEIGHT);
+            pop();
+        }
         pop();
     }
-    pop();
-}
 
-function drawCarMetrics() {
-    const textSizeValue = 1.2; // Base text size
+    drawCarMetrics() {
+        // Base text size that scales with zoom level
+        const baseTextSize = 0.8 * (30 / SCALE_FACTOR); // Scales inversely with zoom
+        const padding = 1 * (30 / SCALE_FACTOR); // Padding that scales with zoom
 
-    push();
-    fill(255);
-    noStroke();
-
-    // Position text relative to camera view
-    const screenX = chassisBody.position[0] - PHYSICS_WIDTH / 2 + textSizeValue;
-    const screenY = chassisBody.position[1] - PHYSICS_HEIGHT / 2 + textSizeValue;
-
-    if (raceFinished) {
-        // Draw large centered finish text
-        textSize(textSizeValue * 3); // Larger text for finish message
-        textAlign(CENTER, CENTER);
-
-        // Calculate center of screen relative to car
-        const centerX = chassisBody.position[0];
-        const centerY = chassisBody.position[1];
-
-        // Draw finish message and time
-        text("FINISH!", centerX, centerY - textSizeValue * 2);
-        text(raceTime.toFixed(2) + "s", centerX, centerY + textSizeValue * 2);
-
-        // Draw checkpoint times in columns
-        textSize(textSizeValue);
-
-        // Calculate number of columns based on total checkpoints
-        const columnsCount = Math.min(4, Math.ceil(Math.sqrt(checkpointTimes.length)));
-        const rowsCount = Math.ceil(checkpointTimes.length / columnsCount);
-        const columnWidth = textSizeValue * 8; // Width between columns
-        const rowHeight = textSizeValue * 1.5; // Height between rows
-
-        checkpointTimes.forEach((time, index) => {
-            const column = index % columnsCount;
-            const row = Math.floor(index / columnsCount);
-
-            const x = centerX + (column - (columnsCount - 1) / 2) * columnWidth;
-            const y = centerY + textSizeValue * 6 + row * rowHeight;
-
-            text(`CP${index + 1}: ${time.toFixed(2)}s`, x, y);
-        });
-    } else {
-        // Regular race display
-        textSize(textSizeValue);
+        push();
+        fill(255);
+        noStroke();
         textAlign(LEFT, TOP);
+        textSize(baseTextSize);
 
-        // Update and display race time
-        if (startTime !== null && !raceFinished) {
-            raceTime = (Date.now() - startTime) / 1000;
+        // Calculate screen bounds in physics units
+        const viewWidth = CANVAS_WIDTH / SCALE_FACTOR;
+        const viewHeight = CANVAS_HEIGHT / SCALE_FACTOR;
+
+        // Calculate positions relative to car's position
+        const screenLeft = this.chassisBody.position[0] - viewWidth / 2;
+        const screenTop = this.chassisBody.position[1] - viewHeight / 2;
+        const screenRight = screenLeft + viewWidth;
+
+        if (this.raceFinished) {
+            // Center position for finish message
+            const centerX = this.chassisBody.position[0];
+            const centerY = this.chassisBody.position[1];
+
+            textAlign(CENTER, CENTER);
+            textSize(baseTextSize * 2);
+            text("FINISH!", centerX, centerY - baseTextSize * 2);
+            text(this.raceTime.toFixed(2) + "s", centerX, centerY);
+
+            // Draw checkpoint times in a grid
+            textSize(baseTextSize);
+            const columnWidth = 6 * (30 / SCALE_FACTOR); // Scale column width with zoom
+            const rowHeight = baseTextSize * 1.5;
+            const columnsCount = Math.min(4, Math.ceil(Math.sqrt(this.checkpointTimes.length)));
+
+            this.checkpointTimes.forEach((time, index) => {
+                const column = index % columnsCount;
+                const row = Math.floor(index / columnsCount);
+                const x = centerX + (column - (columnsCount - 1) / 2) * columnWidth;
+                const y = centerY + baseTextSize * 4 + row * rowHeight;
+                text(`CP${index + 1}: ${time.toFixed(2)}s`, x, y);
+            });
+        } else {
+            // Update race time
+            if (this.startTime !== null && !this.raceFinished) {
+                this.raceTime = (Date.now() - this.startTime) / 1000;
+            }
+            const rowHeight = baseTextSize * 1.4;
+
+            // Right-aligned time display (top right)
+            textAlign(RIGHT, TOP);
+            const timeText = `Time: ${this.raceTime.toFixed(2)}s`;
+            const timeTextWidth = textWidth(timeText);
+            const timeTextX = screenRight - timeTextWidth / 2;
+            const timeTextY = screenTop + rowHeight;
+            text(timeText, timeTextX, timeTextY);
+
+            // Checkpoint times (right side, below time)
+            const checkpointY = screenTop + rowHeight;
+
+            // Show only last 3 checkpoints during race for compact display
+            const recentCheckpoints = this.checkpointTimes.slice(-3);
+            const startIndex = Math.max(0, this.checkpointTimes.length - 3);
+
+            // Calculate max text width for alignment
+            let maxTextWidth = 0;
+            recentCheckpoints.forEach((time, idx) => {
+                const actualIndex = startIndex + idx;
+                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
+                const textW = textWidth(cpText);
+                maxTextWidth = Math.max(maxTextWidth, textW) / 2;
+            });
+
+            recentCheckpoints.forEach((time, idx) => {
+                const actualIndex = startIndex + idx;
+                const y = checkpointY + (idx + 1) * rowHeight;
+                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
+
+                // Align text based on its width
+                const x = screenRight - maxTextWidth;
+                text(cpText, x, y);
+            });
+            // Left-aligned displays (speed and checkpoint progress)
+            textAlign(LEFT, TOP);
+
+            // Speed display
+            const carSpeed = Math.sqrt(
+                Math.pow(this.chassisBody.velocity[0], 2) +
+                Math.pow(this.chassisBody.velocity[1], 2)
+            ).toFixed(2);
+            const speedX = screenLeft + padding;
+            const speedY = screenTop + rowHeight;
+            text(`Speed: ${carSpeed} m/s`, speedX, speedY);
+
+            // Checkpoint progress
+            const progressText = `Checkpoints: ${this.hitCheckpoints.size}/${this.totalCheckpoints}`;
+            const progressX = screenLeft + padding;
+            const progressY = screenTop + 2 * rowHeight;
+            text(progressText, progressX, progressY);
         }
-        const timeText = `Time: ${raceTime.toFixed(2)}s`;
-        const timerLeftPosition = screenX + PHYSICS_WIDTH - (textWidth(timeText) + 2);
-        text(timeText, timerLeftPosition, screenY);
 
-        // Display checkpoint times in columns on the right
-        const columnsCount = Math.min(3, Math.ceil(Math.sqrt(checkpointTimes.length)));
-        const rowsCount = Math.ceil(checkpointTimes.length / columnsCount);
-        const columnWidth = textSizeValue * 8;
-
-        checkpointTimes.forEach((time, index) => {
-            const column = index % columnsCount;
-            const row = Math.floor(index / columnsCount);
-
-            const x = screenX + PHYSICS_WIDTH - (columnsCount - column) * columnWidth;
-            const y = screenY + textSizeValue * (1.5 + row);
-
-            text(`CP${index + 1}: ${time.toFixed(2)}s`, x, y);
-        });
-
-        // Display car metrics
-        const carSpeed = Math.sqrt(Math.pow(chassisBody.velocity[0], 2) + Math.pow(chassisBody.velocity[1], 2)).toFixed(2);
-        text(`Speed: ${carSpeed} m/s`, screenX, screenY + textSizeValue * 1.5);
-
-        // Display checkpoint progress
-        const progressText = `Checkpoints: ${hitCheckpoints.size}/${totalCheckpoints}`;
-        text(progressText, screenX, screenY + textSizeValue * 3);
-
+        pop();
     }
 
-    pop();
+    setTotalCheckpoints(total) {
+        this.totalCheckpoints = total;
+    }
 }
