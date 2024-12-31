@@ -1,6 +1,6 @@
 // Debug flag
 const DEBUG = true;
-const track = new Track(world);
+const track = new Track(world, DEBUG);
 let car; // Declare car variable
 
 function setup() {
@@ -12,7 +12,7 @@ function setup() {
     track.setup();
 
     // Create car instance
-    car = new Car(world);
+    car = new Car(world, DEBUG);
     car.setTotalCheckpoints(track.getTotalCheckpoints());
 }
 

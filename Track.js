@@ -22,7 +22,6 @@ class Track {
         FINISH: Math.pow(2, 4)
     };
 
-    debug = true;
     type = 'loop';
     track = [];
     checkpoints = [];
@@ -61,8 +60,9 @@ class Track {
         { type: 'c', radius: 6, direction: 'l' },
     ];
 
-    constructor(world) {
+    constructor(world, debug = false) {
         this.world = world;
+        this.debug = debug;
     }
 
     setup() {

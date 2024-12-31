@@ -24,8 +24,15 @@ class Car {
 
     static MAX_STEER = Math.PI / 4;
 
-    constructor(world) {
+    static RAY_LENGTH = 20; // Maximum length of detection rays
+    static RAY_COUNT = 16; // Number of rays (360/45 = 8 rays, one every 45 degrees)
+    static RAY_SPREAD = 2 * Math.PI; // 360 degrees in radians
+    static RAY_COLOR = [255, 165, 0, 128]; // Orange with 50% transparency
+
+
+    constructor(world, debug = false) {
         this.world = world;
+        this.debug = debug;
         this.carBodyImage = null;
         this.carWheelImage = null;
 
@@ -45,6 +52,13 @@ class Car {
             '38': 0, // up
             '40': 0  // down
         };
+
+        // Add rays array to store raycast results
+        this.rays = Array(Car.RAY_COUNT).fill().map(() => ({
+            start: [0, 0],
+            end: [0, 0],
+            fraction: 1 // Will store how far the ray got before hitting something
+        }));
 
         this.setupPhysics();
         this.setupEventListeners();
@@ -188,6 +202,10 @@ class Car {
     }
 
     draw() {
+        this.updateRays();
+        if (this.debug) {
+            this.drawRays();
+        }
         this.drawCar();
         this.drawCarMetrics();
     }
@@ -317,5 +335,90 @@ class Car {
 
     setTotalCheckpoints(total) {
         this.totalCheckpoints = total;
+    }
+
+    updateRays() {
+        // Calculate the angle step for rays spread across 360 degrees
+        const rayAngleStep = Car.RAY_SPREAD / Car.RAY_COUNT;
+
+        for (let i = 0; i < Car.RAY_COUNT; i++) {
+            // Calculate ray angle to spread evenly around the car
+            // Start at 90 degrees (PI/2) and go counter-clockwise
+            const rayAngle = (Math.PI / 2) + i * rayAngleStep;
+            const globalAngle = this.chassisBody.angle + rayAngle;
+
+            // Calculate ray start point (car's position)
+            const start = this.chassisBody.position;
+
+            // Calculate ray end point
+            const end = [
+                start[0] + Math.cos(globalAngle) * Car.RAY_LENGTH,
+                start[1] + Math.sin(globalAngle) * Car.RAY_LENGTH
+            ];
+
+            // Store ray start and end points
+            this.rays[i].start = start;
+            this.rays[i].end = end;
+
+            // Perform raycast
+            const result = new p2.RaycastResult();
+            this.world.raycast(result, new p2.Ray({
+                from: start,
+                to: end,
+                mode: p2.Ray.CLOSEST,
+                collisionMask: Track.COLLISION_GROUP.WALL
+            }));
+
+            // Store the fraction of how far the ray got before hitting something
+            this.rays[i].fraction = result.hasHit() ? result.fraction : 1;
+        }
+    }
+
+    drawRays() {
+        push();
+        stroke(...Car.RAY_COLOR); // Semi-transparent orange color
+        strokeWeight(2 / SCALE_FACTOR); // Adjust line thickness based on zoom
+
+        this.rays.forEach((ray, index) => {
+            const hitX = ray.start[0] + (ray.end[0] - ray.start[0]) * ray.fraction;
+            const hitY = ray.start[1] + (ray.end[1] - ray.start[1]) * ray.fraction;
+
+            // Draw the ray line
+            line(ray.start[0], ray.start[1], hitX, hitY);
+
+            // Calculate actual distance, capped at RAY_LENGTH
+            const distance = Math.min(Car.RAY_LENGTH * ray.fraction, Car.RAY_LENGTH);
+
+            // Position for distance text (middle of the ray)
+            const distanceTextX = (ray.start[0] + hitX) / 2;
+            const distanceTextY = (ray.start[1] + hitY) / 2;
+
+            // Calculate position for ray number (further out from start of ray)
+            const rayDirection = [
+                hitX - ray.start[0],
+                hitY - ray.start[1]
+            ];
+            const rayLength = Math.sqrt(rayDirection[0] * rayDirection[0] + rayDirection[1] * rayDirection[1]);
+            const normalizedDirection = [
+                rayDirection[0] / rayLength,
+                rayDirection[1] / rayLength
+            ];
+            const rayNumberX = ray.start[0] + normalizedDirection[0] * 1;
+            const rayNumberY = ray.start[1] + normalizedDirection[1] * 1;
+
+            // Draw ray number
+            push();
+            noStroke();
+            fill(255, 255, 0); // Yellow color for ray number
+            textAlign(CENTER, CENTER);
+            textSize(0.3);
+            text(index, rayNumberX, rayNumberY);
+
+            // Draw distance value
+            fill(255); // White color for distance
+            text(distance.toFixed(1), distanceTextX, distanceTextY);
+            pop();
+        });
+        pop();
     }
 }
