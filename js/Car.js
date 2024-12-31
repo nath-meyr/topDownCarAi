@@ -29,6 +29,7 @@ class Car {
     static RAY_SPREAD = 2 * Math.PI; // 360 degrees in radians
     static RAY_COLOR = [255, 165, 0, 128]; // Orange with 50% transparency
 
+    static SCORE_DISPLAY_TIME = 5000; // How long to show the score screen in ms
 
     constructor(gameWorld, debug = false) {
         this.gameWorld = gameWorld;
@@ -60,6 +61,10 @@ class Car {
             end: [0, 0],
             fraction: 1 // Will store how far the ray got before hitting something
         }));
+
+        this.scoreManager = new ScoreManager();
+        this.scorePosition = null;
+        this.scoreDisplayStartTime = null;
 
         this.setupPhysics();
         this.setupEventListeners();
@@ -135,6 +140,10 @@ class Car {
             this.raceFinished = true;
             this.backWheel.engineForce = 0;
             this.frontWheel.steerValue = 0;
+
+            // Add score to score manager
+            this.scorePosition = this.scoreManager.addScore(this.raceTime, this.checkpointTimes);
+            this.scoreDisplayStartTime = Date.now();
         }
     }
     handleWallCollision() {
@@ -259,9 +268,19 @@ class Car {
             text("FINISH!", centerX, centerY - baseTextSize * 2);
             text(this.raceTime.toFixed(2) + "s", centerX, centerY);
 
+            // Show position and best time
+            const bestScore = this.scoreManager.getBestScore();
+            textSize(baseTextSize * 1.5);
+            text(`Position: ${this.scorePosition}`, centerX, centerY + baseTextSize * 2);
+
+            if (bestScore) {
+                text(`Best: ${ScoreManager.formatTime(bestScore.totalTime)}`,
+                    centerX, centerY + baseTextSize * 4);
+            }
+
             // Draw checkpoint times in a grid
             textSize(baseTextSize);
-            const columnWidth = 6 * (30 / this.gameWorld.getScaleFactor()); // Scale column width with zoom
+            const columnWidth = 6 * (30 / this.gameWorld.getScaleFactor());
             const rowHeight = baseTextSize * 1.5;
             const columnsCount = Math.min(4, Math.ceil(Math.sqrt(this.checkpointTimes.length)));
 
@@ -269,8 +288,8 @@ class Car {
                 const column = index % columnsCount;
                 const row = Math.floor(index / columnsCount);
                 const x = centerX + (column - (columnsCount - 1) / 2) * columnWidth;
-                const y = centerY + baseTextSize * 4 + row * rowHeight;
-                text(`CP${index + 1}: ${time.toFixed(2)}s`, x, y);
+                const y = centerY + baseTextSize * 6 + row * rowHeight;
+                text(`CP${index + 1}: ${ScoreManager.formatTime(time)}`, x, y);
             });
         } else {
             // Update race time
