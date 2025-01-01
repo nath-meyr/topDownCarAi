@@ -11,7 +11,7 @@ async function startGame(trackId, shouldCreateNew = true) {
         track.setup(trackId);
         gameWorld.setTrack(track);
 
-        car = new Car(gameWorld, DEBUG);
+        car = new Car(gameWorld, menu, DEBUG);
         car.setTotalCheckpoints(track.getTotalCheckpoints());
     } else {
         // Reuse existing game instance
@@ -82,7 +82,11 @@ function draw() {
 // Add key handler to return to menu
 function keyPressed() {
     if (keyCode === ESCAPE && !car?.isCountingDown) {
-        menu.show();
+        if (menu.isMenuVisible()) {
+            menu.hide();
+        } else {
+            menu.show();
+        }
     }
 }
 

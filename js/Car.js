@@ -32,10 +32,11 @@ class Car {
 
     static SCORE_DISPLAY_TIME = 5000;
 
-    constructor(gameWorld, debug = false) {
+    constructor(gameWorld, menu = null, debug = false) {
         this.gameWorld = gameWorld;
         this.world = gameWorld.getPhysicsWorld();
         this.debug = debug;
+        this.menu = menu; // Store menu reference
         this.carBodyImage = null;
         this.carWheelImage = null;
 
@@ -149,6 +150,22 @@ class Car {
             const trackId = this.gameWorld.track.getCurrentTrackId();
             this.scorePosition = this.scoreManager.addScore(trackId, this.raceTime, this.checkpointTimes);
             this.scoreDisplayStartTime = Date.now();
+
+            // Update menu scores if menu exists
+            if (this.menu) {
+                this.menu.updateScores();
+            }
+
+            // Show finish overlay
+            const bestScore = this.scoreManager.getBestScore(trackId);
+            this.display.showFinish({
+                time: this.raceTime,
+                position: this.scorePosition,
+                wallHits: this.wallCollisions,
+                bestTime: bestScore ? bestScore.totalTime : null,
+                checkpointTimes: this.checkpointTimes,
+                trackName: this.gameWorld.track.getCurrentTrackName()
+            });
         }
     }
     handleWallCollision() {

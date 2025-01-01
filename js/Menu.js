@@ -3,6 +3,7 @@ class Menu {
         this.container = this.createContainer();
         this.onTrackSelect = onTrackSelect;
         this.scoreManager = new ScoreManager();
+        this.isVisible = true;
         this.createMenu();
     }
 
@@ -89,6 +90,7 @@ class Menu {
 
         // Get top 5 scores for this track
         const scores = this.scoreManager.getScores(track.id).slice(0, 5);
+        console.log('Scores:', scores);
         if (scores.length > 0) {
             const scoresList = document.createElement('div');
             scoresList.style.marginBottom = '1rem';
@@ -151,9 +153,21 @@ class Menu {
         this.container.innerHTML = '';
         this.createMenu();
         this.container.style.display = 'flex';
+        this.isVisible = true;
     }
 
     hide() {
         this.container.style.display = 'none';
+        this.isVisible = false;
+    }
+
+    isMenuVisible() {
+        return this.isVisible;
+    }
+
+    updateScores() {
+        console.log('Updating scores');
+        this.container.innerHTML = '';
+        this.createMenu();
     }
 } 
