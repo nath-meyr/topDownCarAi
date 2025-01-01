@@ -51,13 +51,8 @@ class Car {
         // Wall collision counter
         this.wallCollisions = 0;
 
-        // Key controls
-        this.keys = {
-            '37': 0, // left
-            '39': 0, // right
-            '38': 0, // up
-            '40': 0  // down
-        };
+        // Replace direct key handling with brain
+        this.brain = new HumanBrain();
 
         // Add rays array to store raycast results
         this.rays = Array(Car.RAY_COUNT).fill().map(() => ({
@@ -70,11 +65,13 @@ class Car {
         this.scorePosition = null;
         this.scoreDisplayStartTime = null;
 
-        this.display = new Display();
+        this.display = new Display(() => this.restartRace());
         this.display.positionElements();
 
         this.setupPhysics();
-        this.setupEventListeners();
+
+        this.isCountingDown = true;
+        this.display.hideAllMetrics();
     }
 
     setupPhysics() {
@@ -169,50 +166,56 @@ class Car {
         }
     }
 
-    setupEventListeners() {
-        document.addEventListener("keydown", (evt) => this.handleKeyDown(evt));
-        document.addEventListener("keyup", (evt) => this.handleKeyUp(evt));
+    // Add input methods
+    forward(value = 1) {
+        if (this.isCountingDown || this.raceFinished) return;
+        this.backWheel.engineForce = value * Car.FORWARD_ENGINE_FORCE;
     }
 
-    handleKeyDown(evt) {
-        if (this.startTime === null) {
-            this.startTime = Date.now();
+    backward(value = 1) {
+        if (this.isCountingDown || this.raceFinished) return;
+        if (this.backWheel.getSpeed() > 0.1) {
+            this.backWheel.setBrakeForce(Car.BRAKE_FORCE * value);
+        } else {
+            this.backWheel.setBrakeForce(0);
+            this.backWheel.engineForce = Car.REVERSE_ENGINE_FORCE * value;
         }
-        this.keys[evt.keyCode] = 1;
-        this.updateVehicleControls();
     }
 
-    handleKeyUp(evt) {
-        this.keys[evt.keyCode] = 0;
-        this.updateVehicleControls();
+    steerLeft(value = 1) {
+        if (this.isCountingDown || this.raceFinished) return;
+        this.frontWheel.steerValue = -Car.MAX_STEER * value;
     }
 
-    updateSteering() {
-        this.frontWheel.steerValue = Car.MAX_STEER * (this.keys[39] - this.keys[37]);
+    steerRight(value = 1) {
+        if (this.isCountingDown || this.raceFinished) return;
+        this.frontWheel.steerValue = Car.MAX_STEER * value;
     }
 
-    updateEngineForce() {
-        this.backWheel.engineForce = this.keys[38] * Car.FORWARD_ENGINE_FORCE;
-    }
-
-    updateBraking() {
+    clearControls() {
+        this.frontWheel.steerValue = 0;
+        this.backWheel.engineForce = 0;
         this.backWheel.setBrakeForce(0);
-        if (this.keys[40]) {
-            if (this.backWheel.getSpeed() > 0.1) {
-                this.backWheel.setBrakeForce(Car.BRAKE_FORCE);
-            } else {
-                this.backWheel.setBrakeForce(0);
-                this.backWheel.engineForce = Car.REVERSE_ENGINE_FORCE;
-            }
-        }
     }
 
     updateVehicleControls() {
-        if (!this.raceFinished) {
-            this.updateSteering();
-            this.updateEngineForce();
-            this.updateBraking();
-        }
+        if (this.isCountingDown || this.raceFinished) return;
+
+        const controls = this.brain.getControls();
+
+        // Clear previous controls
+        this.clearControls();
+
+        // Apply new controls
+        if (controls.left > 0) this.steerLeft(controls.left);
+        if (controls.right > 0) this.steerRight(controls.right);
+        if (controls.up > 0) this.forward(controls.up);
+        if (controls.down > 0) this.backward(controls.down);
+    }
+
+    update() {
+        this.brain.update();
+        this.updateVehicleControls();
     }
 
     moveViewToCar() {
@@ -248,6 +251,8 @@ class Car {
     }
 
     updateDisplay() {
+        if (this.isCountingDown) return;
+
         const speed = Math.sqrt(
             Math.pow(this.chassisBody.velocity[0], 2) +
             Math.pow(this.chassisBody.velocity[1], 2)
@@ -365,5 +370,42 @@ class Car {
             pop();
         });
         pop();
+    }
+
+    startRace() {
+        this.isCountingDown = false;
+        this.startTime = Date.now();
+        this.display.showAllMetrics();
+    }
+
+    restartRace() {
+        // Reset car position and angle
+        this.chassisBody.position = [0, 0];
+        this.chassisBody.angle = -90 * Math.PI / 180;
+        this.chassisBody.velocity = [0, 0];
+        this.chassisBody.angularVelocity = 0;
+
+        // Reset wheels
+        this.frontWheel.steerValue = 0;
+        this.backWheel.engineForce = 0;
+        this.backWheel.setBrakeForce(0);
+
+        // Reset race variables
+        this.startTime = null;
+        this.raceTime = 0;
+        this.checkpointTimes = [];
+        this.hitCheckpoints = new Set();
+        this.allCheckpointsHit = false;
+        this.raceFinished = false;
+        this.wallCollisions = 0;
+
+        // Reset countdown state
+        this.isCountingDown = true;
+        this.display.hideAllMetrics();
+
+        // Start new countdown
+        this.display.startCountdown(() => {
+            this.startRace();
+        });
     }
 }

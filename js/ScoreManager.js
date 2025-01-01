@@ -19,6 +19,8 @@ class ScoreManager {
         this.scores[trackId].push(score);
         this.scores[trackId].sort((a, b) => a.totalTime - b.totalTime); // Sort by best time
         this.scores[trackId] = this.scores[trackId].slice(0, 10); // Keep only top 10 scores
+
+        // Save scores immediately after adding a new one
         this.saveScores();
 
         return this.getScorePosition(trackId, totalTime);
@@ -37,13 +39,24 @@ class ScoreManager {
 
     // Load scores from localStorage
     loadScores() {
-        const savedScores = localStorage.getItem('raceScores');
-        this.scores = savedScores ? JSON.parse(savedScores) : {};
+        try {
+            const savedScores = localStorage.getItem('raceScores');
+            if (savedScores) {
+                this.scores = JSON.parse(savedScores);
+            }
+        } catch (error) {
+            console.error('Error loading scores:', error);
+            this.scores = {};
+        }
     }
 
     // Save scores to localStorage
     saveScores() {
-        localStorage.setItem('raceScores', JSON.stringify(this.scores));
+        try {
+            localStorage.setItem('raceScores', JSON.stringify(this.scores));
+        } catch (error) {
+            console.error('Error saving scores:', error);
+        }
     }
 
     // Get the best score for a specific track
@@ -56,5 +69,11 @@ class ScoreManager {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = (seconds % 60).toFixed(2);
         return `${minutes}:${remainingSeconds.padStart(5, '0')}`;
+    }
+
+    // Clear all scores (useful for testing)
+    clearAllScores() {
+        this.scores = {};
+        this.saveScores();
     }
 } 

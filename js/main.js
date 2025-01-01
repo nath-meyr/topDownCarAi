@@ -4,14 +4,28 @@ let gameWorld;
 let car;
 let menu;
 
-function startGame(trackId) {
-    // Initialize track and car
-    const track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
-    track.setup(trackId);
-    gameWorld.setTrack(track);
+async function startGame(trackId, shouldCreateNew = true) {
+    if (shouldCreateNew) {
+        // Initialize track and car
+        const track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
+        track.setup(trackId);
+        gameWorld.setTrack(track);
 
-    car = new Car(gameWorld, DEBUG);
-    car.setTotalCheckpoints(track.getTotalCheckpoints());
+        car = new Car(gameWorld, DEBUG);
+        car.setTotalCheckpoints(track.getTotalCheckpoints());
+    } else {
+        // Reuse existing game instance
+        gameWorld.getTrack().setup(trackId);
+        car.setTotalCheckpoints(gameWorld.getTrack().getTotalCheckpoints());
+        car.restartRace();
+    }
+
+    // Start countdown and then start the race
+    if (shouldCreateNew) {
+        await car.display.startCountdown(() => {
+            car.startRace();
+        });
+    }
 }
 
 function setup() {
@@ -28,7 +42,8 @@ function setup() {
 
     // Create menu
     menu = new Menu(trackId => {
-        startGame(trackId);
+        // If car exists, reuse it, otherwise create new game
+        startGame(trackId, !car);
     });
 }
 
@@ -36,6 +51,9 @@ function draw() {
     if (!gameWorld.getTrack()) {
         return; // Don't draw anything until track is selected
     }
+
+    // Update car controls
+    car.update();
 
     // Get car speed for scale factor calculation
     const carSpeed = Math.sqrt(
@@ -63,7 +81,7 @@ function draw() {
 
 // Add key handler to return to menu
 function keyPressed() {
-    if (keyCode === ESCAPE) {
+    if (keyCode === ESCAPE && !car?.isCountingDown) {
         menu.show();
     }
 }
