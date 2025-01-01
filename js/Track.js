@@ -11,9 +11,11 @@ class Track {
     static DEBUG_COLOR = [255, 0, 255];
     static ROAD_COLOR = 100;
     static WALL_COLOR = 0;
+    static WALL_WIDTH = 0.5;
     static START_LINE_COLOR = [0, 255, 0]; // Green for start line
     static FINISH_LINE_COLOR = [255, 0, 0]; // Red for finish line
     static CHECKPOINT_COLOR = [0, 0, 255];  // Blue for checkpoints
+    static CENTER_LINE_COLOR = 255; // White for center line
     static COLLISION_GROUP = {
         CAR: Math.pow(2, 0),
         WALL: Math.pow(2, 1),
@@ -387,10 +389,27 @@ class Track {
         // Draw all road surfaces
         this.drawAllRoadSurface(Track.ROAD_COLOR, Track.ROAD_WIDTH, roadSurfaceInstructions);
 
+
+        // Draw start/finish and checkpoints
+        this.drawStartFinishLine();
+        this.drawCheckpoints();
+
+        this.drawAllWalls(Track.WALL_COLOR, Track.WALL_WIDTH, wallsInstructions);
+
+        if (this.debug) {
+            this.drawAllRoadSurface(Track.DEBUG_COLOR, 0.05, roadSurfaceInstructions);
+        }
+
+        drawingContext.setLineDash([1, 1])
+        this.drawAllRoadSurface(Track.CENTER_LINE_COLOR, 0.05, roadSurfaceInstructions);
+
+    }
+
+    drawAllWalls(color, width, wallInstructions) {
         // Draw all walls
-        stroke(Track.WALL_COLOR);
-        strokeWeight(0.5);
-        for (const instruction of wallsInstructions) {
+        stroke(color);
+        strokeWeight(width);
+        for (const instruction of wallInstructions) {
             if (instruction.type === 'straight') {
                 this.drawWalls(
                     instruction.data.start,
@@ -411,14 +430,6 @@ class Track {
                 );
             }
         }
-
-        if (this.debug) {
-            this.drawAllRoadSurface(Track.DEBUG_COLOR, 0.05, roadSurfaceInstructions);
-        }
-
-        // Draw start/finish and checkpoints
-        this.drawStartFinishLine();
-        this.drawCheckpoints();
     }
 
     drawAllRoadSurface(color, width, roadInstructions) {

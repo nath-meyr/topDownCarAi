@@ -24,12 +24,13 @@ class Car {
 
     static MAX_STEER = Math.PI / 4;
 
-    static RAY_LENGTH = 20; // Maximum length of detection rays
-    static RAY_COUNT = 16; // Number of rays (360/45 = 8 rays, one every 45 degrees)
-    static RAY_SPREAD = 2 * Math.PI; // 360 degrees in radians
-    static RAY_COLOR = [255, 165, 0, 128]; // Orange with 50% transparency
+    static RAY_LENGTH = 20;
+    static RAY_COUNT = 5;
+    static RAY_SPREAD = Math.PI;
+    static RAY_DEVIATION = 0;
+    static RAY_COLOR = [255, 165, 0, 128];
 
-    static SCORE_DISPLAY_TIME = 5000; // How long to show the score screen in ms
+    static SCORE_DISPLAY_TIME = 5000;
 
     constructor(gameWorld, debug = false) {
         this.gameWorld = gameWorld;
@@ -47,6 +48,9 @@ class Car {
         this.allCheckpointsHit = false;
         this.raceFinished = false;
 
+        // Wall collision counter
+        this.wallCollisions = 0;
+
         // Key controls
         this.keys = {
             '37': 0, // left
@@ -59,7 +63,7 @@ class Car {
         this.rays = Array(Car.RAY_COUNT).fill().map(() => ({
             start: [0, 0],
             end: [0, 0],
-            fraction: 1 // Will store how far the ray got before hitting something
+            fraction: 1
         }));
 
         this.scoreManager = new ScoreManager();
@@ -153,6 +157,7 @@ class Car {
         );
 
         if (speed > 0.1) {
+            this.wallCollisions++; // Increment wall collision counter
             this.chassisBody.velocity[0] *= Car.COLLISION_DAMPING;
             this.chassisBody.velocity[1] *= Car.COLLISION_DAMPING;
             this.chassisBody.angularVelocity *= Car.COLLISION_DAMPING;
@@ -272,6 +277,7 @@ class Car {
             const bestScore = this.scoreManager.getBestScore();
             textSize(baseTextSize * 1.5);
             text(`Position: ${this.scorePosition}`, centerX, centerY + baseTextSize * 2);
+            text(`Wall Hits: ${this.wallCollisions}`, centerX, centerY + baseTextSize * 3); // Add wall collision display
 
             if (bestScore) {
                 text(`Best: ${ScoreManager.formatTime(bestScore.totalTime)}`,
@@ -348,6 +354,12 @@ class Car {
             const progressX = screenLeft + padding;
             const progressY = screenTop + 2 * rowHeight;
             text(progressText, progressX, progressY);
+
+            // Wall collisions display
+            const wallText = `Wall Hits: ${this.wallCollisions}`;
+            const wallX = screenLeft + padding;
+            const wallY = screenTop + 3 * rowHeight;
+            text(wallText, wallX, wallY);
         }
 
         pop();
@@ -359,12 +371,12 @@ class Car {
 
     updateRays() {
         // Calculate the angle step for rays spread across 360 degrees
-        const rayAngleStep = Car.RAY_SPREAD / Car.RAY_COUNT;
+        const rayAngleStep = Car.RAY_SPREAD / (Car.RAY_COUNT - 1);
 
         for (let i = 0; i < Car.RAY_COUNT; i++) {
             // Calculate ray angle to spread evenly around the car
             // Start at 90 degrees (PI/2) and go counter-clockwise
-            const rayAngle = (Math.PI / 2) + i * rayAngleStep;
+            const rayAngle = Car.RAY_DEVIATION + i * rayAngleStep;
             const globalAngle = this.chassisBody.angle + rayAngle;
 
             // Calculate ray start point (car's position)

@@ -1,5 +1,5 @@
 // Debug flag
-const DEBUG = false;
+const DEBUG = true;
 let gameWorld;
 let track;
 let car;
