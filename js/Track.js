@@ -21,7 +21,8 @@ class Track {
         WALL: Math.pow(2, 1),
         CHECKPOINT: Math.pow(2, 2),
         START: Math.pow(2, 3),
-        FINISH: Math.pow(2, 4)
+        FINISH: Math.pow(2, 4),
+        AI_CAR: Math.pow(2, 5)
     };
 
     type = 'loop';
@@ -144,7 +145,7 @@ class Track {
             width: length,
             height: Track.WALL_THICKNESS,
             collisionGroup: Track.COLLISION_GROUP.WALL,
-            collisionMask: Track.COLLISION_GROUP.CAR
+            collisionMask: Track.COLLISION_GROUP.CAR | Track.COLLISION_GROUP.AI_CAR
         });
         wall.addShape(shape);
 
@@ -462,9 +463,30 @@ class Track {
 
     createCheckpoint(position, angle) {
         const perpendicularAngle = angle + 90;
-        const checkpointBody = this.createLineBody(position, perpendicularAngle, Track.CHECKPOINT_GROUP);
-        checkpointBody.checkpointIndex = this.checkpoints.length;
-        this.checkpoints.push({ position: position.copy(), angle: perpendicularAngle });
+        const checkpoint = new p2.Body({
+            mass: 0,
+            position: [position.x, position.y],
+            angle: radians(perpendicularAngle)
+        });
+
+        const shape = new p2.Box({
+            width: Track.ROAD_WIDTH,
+            height: Track.WALL_THICKNESS,
+            // Update collision properties
+            collisionGroup: Track.COLLISION_GROUP.CHECKPOINT,
+            collisionMask: Track.COLLISION_GROUP.CAR | Track.COLLISION_GROUP.AI_CAR,
+            sensor: true  // Make it a sensor so it doesn't block cars
+        });
+
+        checkpoint.addShape(shape);
+        checkpoint.checkpointIndex = this.checkpoints.length;  // Add index to body
+        this.world.addBody(checkpoint);
+
+        this.checkpoints.push({
+            position: position,
+            angle: perpendicularAngle,
+            body: checkpoint
+        });
     }
 
     createLineBody(position, angle = 0, group = Track.CHECKPOINT_GROUP) {
@@ -557,5 +579,25 @@ class Track {
 
     getTotalCheckpoints() {
         return this.checkpoints.length;
+    }
+
+    getNextCheckpoint(position, hitCheckpoints) {
+        // Return the next checkpoint in sequence
+        const nextIndex = hitCheckpoints.size;
+        if (nextIndex < this.checkpoints.length) {
+            return {
+                position: this.checkpoints[nextIndex].position,
+                index: nextIndex
+            };
+        }
+        return null;
+    }
+
+    // Helper method to get checkpoint by index
+    getCheckpoint(index) {
+        if (index >= 0 && index < this.checkpoints.length) {
+            return this.checkpoints[index];
+        }
+        return null;
     }
 }

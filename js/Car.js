@@ -26,11 +26,30 @@ class Car {
 
     static RAY_LENGTH = 20;
     static RAY_COUNT = 5;
-    static RAY_SPREAD = Math.PI;
-    static RAY_DEVIATION = 0;
+    static RAY_SPREAD = Math.PI / 2;
+    static RAY_DEVIATION = -Math.PI / 4;
     static RAY_COLOR = [255, 165, 0, 128];
 
     static SCORE_DISPLAY_TIME = 5000;
+
+    static AI_ENABLED = true;  // Pour activer/désactiver l'IA
+
+    // Add constant for minimum speed to consider car "moving"
+    static MIN_SPEED_FOR_TIMER = 0.1;
+
+    // Add new static properties for number display
+    static NUMBER_SIZE = 0.3;
+    static NUMBER_COLOR = [255, 255, 255];
+    static NUMBER_BACKGROUND = [0, 0, 0, 180];
+    static NUMBER_PADDING = 0.1;
+
+    // Add constant for chassis type
+    static CHASSIS_TYPE = p2.Body.DYNAMIC;
+
+    // Add constants for scoring
+    static CHECKPOINT_WEIGHT = 1000;  // High weight for checkpoints
+    static WALL_PENALTY = -500;       // Penalty per wall collision
+    static DISTANCE_WEIGHT = -3;      // Small negative weight for distance
 
     constructor(gameWorld, debug = false) {
         this.gameWorld = gameWorld;
@@ -41,7 +60,10 @@ class Car {
 
         // Timer variables
         this.startTime = null;
+        this.finishTime = null;
         this.raceTime = 0;
+        this.hasFinished = false;
+        this.hasStartedMoving = false;  // Add flag to track if car has started moving
         this.checkpointTimes = [];
         this.hitCheckpoints = new Set();
         this.totalCheckpoints = 0;
@@ -70,8 +92,22 @@ class Car {
         this.scorePosition = null;
         this.scoreDisplayStartTime = null;
 
-        this.setupPhysics();
+        this.brain = new NeuralNetwork();
+        this.fitness = 0;
+
+        this.frozen = false;  // Initialize frozen state
+
+        this.setupPhysics();  // Create physics bodies
         this.setupEventListeners();
+
+        // Add car index property
+        this.carIndex = null;
+
+        // Add next expected checkpoint
+        this.nextCheckpointIndex = 0;
+
+        // Add score property
+        this.score = 0;
     }
 
     setupPhysics() {
@@ -80,12 +116,15 @@ class Car {
             mass: Car.CHASSIS_MASS,
             position: [0, 0],
             angle: -90 * Math.PI / 180,
+            type: Car.CHASSIS_TYPE  // Set initial type
         });
 
         this.boxShape = new p2.Box({
             width: Car.CHASSIS_WIDTH,
             height: Car.CHASSIS_HEIGHT,
-            collisionGroup: Track.COLLISION_GROUP.CAR,
+            // Use AI_CAR collision group
+            collisionGroup: Track.COLLISION_GROUP.AI_CAR,
+            // Cars collide with walls, checkpoints, start, and finish - but not with other cars
             collisionMask: Track.COLLISION_GROUP.WALL |
                 Track.COLLISION_GROUP.CHECKPOINT |
                 Track.COLLISION_GROUP.START |
@@ -115,13 +154,18 @@ class Car {
         this.world.on('beginContact', (evt) => {
             if ((evt.bodyA === this.chassisBody || evt.bodyB === this.chassisBody)) {
                 const otherBody = evt.bodyA === this.chassisBody ? evt.bodyB : evt.bodyA;
-                const otherShape = otherBody.shapes[0];
 
-                if (otherShape.collisionGroup === Track.COLLISION_GROUP.CHECKPOINT) {
+                // Check if the other body has a shape
+                if (!otherBody.shapes || !otherBody.shapes[0]) return;
+
+                const otherShape = otherBody.shapes[0];
+                const collisionGroup = otherShape.collisionGroup;
+
+                if (collisionGroup === Track.COLLISION_GROUP.CHECKPOINT) {
                     this.handleCheckpointCollision(otherBody.checkpointIndex);
-                } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.FINISH) {
+                } else if (collisionGroup === Track.COLLISION_GROUP.FINISH) {
                     this.handleFinishCollision();
-                } else if (otherShape.collisionGroup === Track.COLLISION_GROUP.WALL) {
+                } else if (collisionGroup === Track.COLLISION_GROUP.WALL) {
                     this.handleWallCollision();
                 }
             }
@@ -129,9 +173,11 @@ class Car {
     }
 
     handleCheckpointCollision(checkpointIndex) {
-        if (!this.hitCheckpoints.has(checkpointIndex)) {
+        // Only register checkpoint if it's the next expected one
+        if (checkpointIndex === this.nextCheckpointIndex) {
             this.hitCheckpoints.add(checkpointIndex);
             this.checkpointTimes.push(this.raceTime);
+            this.nextCheckpointIndex++;
 
             if (this.hitCheckpoints.size === this.totalCheckpoints) {
                 this.allCheckpointsHit = true;
@@ -140,14 +186,13 @@ class Car {
     }
 
     handleFinishCollision() {
-        if (this.allCheckpointsHit && !this.raceFinished) {
-            this.raceFinished = true;
+        if (this.allCheckpointsHit && !this.hasFinished) {
+            this.hasFinished = true;
+            this.finishTime = this.raceTime;
             this.backWheel.engineForce = 0;
             this.frontWheel.steerValue = 0;
 
-            // Add score to score manager
-            this.scorePosition = this.scoreManager.addScore(this.raceTime, this.checkpointTimes);
-            this.scoreDisplayStartTime = Date.now();
+            this.scorePosition = this.scoreManager.addScore(this.finishTime, this.checkpointTimes);
         }
     }
     handleWallCollision() {
@@ -166,14 +211,19 @@ class Car {
     }
 
     setupEventListeners() {
-        document.addEventListener("keydown", (evt) => this.handleKeyDown(evt));
-        document.addEventListener("keyup", (evt) => this.handleKeyUp(evt));
+        document.addEventListener("keydown", (evt) => {
+            if (!Car.AI_ENABLED) {
+                this.handleKeyDown(evt);
+            }
+        });
+        document.addEventListener("keyup", (evt) => {
+            if (!Car.AI_ENABLED) {
+                this.handleKeyUp(evt);
+            }
+        });
     }
 
     handleKeyDown(evt) {
-        if (this.startTime === null) {
-            this.startTime = Date.now();
-        }
         this.keys[evt.keyCode] = 1;
         this.updateVehicleControls();
     }
@@ -204,11 +254,15 @@ class Car {
     }
 
     updateVehicleControls() {
-        if (!this.raceFinished) {
-            this.updateSteering();
-            this.updateEngineForce();
-            this.updateBraking();
+        if (this.raceFinished || this.frozen) {
+            this.backWheel.engineForce = 0;
+            this.frontWheel.steerValue = 0;
+            return;
         }
+
+        this.updateSteering();
+        this.updateEngineForce();
+        this.updateBraking();
     }
 
     moveViewToCar() {
@@ -217,152 +271,14 @@ class Car {
     }
 
     draw() {
-        this.updateRays();
+        this.updateRaceProgress();
+        this.think();
+        // Only update rays if car is visible
         if (this.debug) {
-            this.drawRays();
+            this.updateRays();
+            this.drawRays();  // Add ray rendering
         }
-        this.drawCar();
-        this.drawCarMetrics();
-    }
-
-    drawCar() {
-        push();
-        translate(this.chassisBody.position[0], this.chassisBody.position[1]);
-        rotate(this.chassisBody.angle + PI);
-        imageMode(CENTER);
-        image(CAR_BODY_IMAGE, 0, 0, this.boxShape.width, this.boxShape.height);
-
-        // Draw front wheels
-        for (let side = -1; side <= 1; side += 2) {
-            push();
-            translate(side * Car.WHEEL_OFFSET_X, Car.WHEEL_OFFSET_Y);
-            rotate(this.frontWheel.steerValue);
-            image(CAR_WHEEL_IMAGE, 0, 0, Car.WHEEL_WIDTH, Car.WHEEL_HEIGHT);
-            pop();
-        }
-        pop();
-    }
-
-    drawCarMetrics() {
-        // Base text size that scales with zoom level
-        const baseTextSize = 0.8 * (30 / this.gameWorld.getScaleFactor()); // Scales inversely with zoom
-        const padding = 1 * (30 / this.gameWorld.getScaleFactor()); // Padding that scales with zoom
-
-        push();
-        fill(255);
-        noStroke();
-        textAlign(LEFT, TOP);
-        textSize(baseTextSize);
-
-        // Calculate screen bounds in physics units
-        const viewWidth = GameWorld.CANVAS_WIDTH / this.gameWorld.getScaleFactor();
-        const viewHeight = GameWorld.CANVAS_HEIGHT / this.gameWorld.getScaleFactor();
-
-        // Calculate positions relative to car's position
-        const screenLeft = this.chassisBody.position[0] - viewWidth / 2;
-        const screenTop = this.chassisBody.position[1] - viewHeight / 2;
-        const screenRight = screenLeft + viewWidth;
-
-        if (this.raceFinished) {
-            // Center position for finish message
-            const centerX = this.chassisBody.position[0];
-            const centerY = this.chassisBody.position[1];
-
-            textAlign(CENTER, CENTER);
-            textSize(baseTextSize * 2);
-            text("FINISH!", centerX, centerY - baseTextSize * 2);
-            text(this.raceTime.toFixed(2) + "s", centerX, centerY);
-
-            // Show position and best time
-            const bestScore = this.scoreManager.getBestScore();
-            textSize(baseTextSize * 1.5);
-            text(`Position: ${this.scorePosition}`, centerX, centerY + baseTextSize * 2);
-            text(`Wall Hits: ${this.wallCollisions}`, centerX, centerY + baseTextSize * 3); // Add wall collision display
-
-            if (bestScore) {
-                text(`Best: ${ScoreManager.formatTime(bestScore.totalTime)}`,
-                    centerX, centerY + baseTextSize * 4);
-            }
-
-            // Draw checkpoint times in a grid
-            textSize(baseTextSize);
-            const columnWidth = 6 * (30 / this.gameWorld.getScaleFactor());
-            const rowHeight = baseTextSize * 1.5;
-            const columnsCount = Math.min(4, Math.ceil(Math.sqrt(this.checkpointTimes.length)));
-
-            this.checkpointTimes.forEach((time, index) => {
-                const column = index % columnsCount;
-                const row = Math.floor(index / columnsCount);
-                const x = centerX + (column - (columnsCount - 1) / 2) * columnWidth;
-                const y = centerY + baseTextSize * 6 + row * rowHeight;
-                text(`CP${index + 1}: ${ScoreManager.formatTime(time)}`, x, y);
-            });
-        } else {
-            // Update race time
-            if (this.startTime !== null && !this.raceFinished) {
-                this.raceTime = (Date.now() - this.startTime) / 1000;
-            }
-            const rowHeight = baseTextSize * 1.4;
-
-            // Right-aligned time display (top right)
-            textAlign(RIGHT, TOP);
-            const timeText = `Time: ${this.raceTime.toFixed(2)}s`;
-            const timeTextWidth = textWidth(timeText);
-            const timeTextX = screenRight - timeTextWidth / 2;
-            const timeTextY = screenTop + rowHeight;
-            text(timeText, timeTextX, timeTextY);
-
-            // Checkpoint times (right side, below time)
-            const checkpointY = screenTop + rowHeight;
-
-            // Show only last 3 checkpoints during race for compact display
-            const recentCheckpoints = this.checkpointTimes.slice(-3);
-            const startIndex = Math.max(0, this.checkpointTimes.length - 3);
-
-            // Calculate max text width for alignment
-            let maxTextWidth = 0;
-            recentCheckpoints.forEach((time, idx) => {
-                const actualIndex = startIndex + idx;
-                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
-                const textW = textWidth(cpText);
-                maxTextWidth = Math.max(maxTextWidth, textW) / 2;
-            });
-
-            recentCheckpoints.forEach((time, idx) => {
-                const actualIndex = startIndex + idx;
-                const y = checkpointY + (idx + 1) * rowHeight;
-                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
-
-                // Align text based on its width
-                const x = screenRight - maxTextWidth;
-                text(cpText, x, y);
-            });
-            // Left-aligned displays (speed and checkpoint progress)
-            textAlign(LEFT, TOP);
-
-            // Speed display
-            const carSpeed = Math.sqrt(
-                Math.pow(this.chassisBody.velocity[0], 2) +
-                Math.pow(this.chassisBody.velocity[1], 2)
-            ).toFixed(2);
-            const speedX = screenLeft + padding;
-            const speedY = screenTop + rowHeight;
-            text(`Speed: ${carSpeed} m/s`, speedX, speedY);
-
-            // Checkpoint progress
-            const progressText = `Checkpoints: ${this.hitCheckpoints.size}/${this.totalCheckpoints}`;
-            const progressX = screenLeft + padding;
-            const progressY = screenTop + 2 * rowHeight;
-            text(progressText, progressX, progressY);
-
-            // Wall collisions display
-            const wallText = `Wall Hits: ${this.wallCollisions}`;
-            const wallX = screenLeft + padding;
-            const wallY = screenTop + 3 * rowHeight;
-            text(wallText, wallX, wallY);
-        }
-
-        pop();
+        this.updateScore();  // Update score each frame
     }
 
     setTotalCheckpoints(total) {
@@ -370,12 +286,14 @@ class Car {
     }
 
     updateRays() {
-        // Calculate the angle step for rays spread across 360 degrees
+        // Only update rays if car is not frozen
+        if (this.frozen) return;
+
+        // Optimize raycast by reducing number of checks
         const rayAngleStep = Car.RAY_SPREAD / (Car.RAY_COUNT - 1);
 
         for (let i = 0; i < Car.RAY_COUNT; i++) {
-            // Calculate ray angle to spread evenly around the car
-            // Start at 90 degrees (PI/2) and go counter-clockwise
+            // Calculate ray angle to spread evenly in front of the car
             const rayAngle = Car.RAY_DEVIATION + i * rayAngleStep;
             const globalAngle = this.chassisBody.angle + rayAngle;
 
@@ -406,51 +324,202 @@ class Car {
         }
     }
 
-    drawRays() {
-        push();
-        stroke(...Car.RAY_COLOR); // Semi-transparent orange color
-        strokeWeight(2 / this.gameWorld.getScaleFactor()); // Use gameWorld's scale factor
+    think() {
+        if (!Car.AI_ENABLED || !this.gameWorld.isRaceStarted() || this.frozen) return;
 
-        this.rays.forEach((ray, index) => {
-            const hitX = ray.start[0] + (ray.end[0] - ray.start[0]) * ray.fraction;
-            const hitY = ray.start[1] + (ray.end[1] - ray.start[1]) * ray.fraction;
+        // Cache calculations that are used multiple times
+        const speed = Math.sqrt(
+            Math.pow(this.chassisBody.velocity[0], 2) +
+            Math.pow(this.chassisBody.velocity[1], 2)
+        );
 
-            // Draw the ray line
-            line(ray.start[0], ray.start[1], hitX, hitY);
+        // Prepare neural network inputs
+        const inputs = [];
 
-            // Calculate actual distance, capped at RAY_LENGTH
-            const distance = Math.min(Car.RAY_LENGTH * ray.fraction, Car.RAY_LENGTH);
-
-            // Position for distance text (middle of the ray)
-            const distanceTextX = (ray.start[0] + hitX) / 2;
-            const distanceTextY = (ray.start[1] + hitY) / 2;
-
-            // Calculate position for ray number (further out from start of ray)
-            const rayDirection = [
-                hitX - ray.start[0],
-                hitY - ray.start[1]
-            ];
-            const rayLength = Math.sqrt(rayDirection[0] * rayDirection[0] + rayDirection[1] * rayDirection[1]);
-            const normalizedDirection = [
-                rayDirection[0] / rayLength,
-                rayDirection[1] / rayLength
-            ];
-            const rayNumberX = ray.start[0] + normalizedDirection[0] * 1;
-            const rayNumberY = ray.start[1] + normalizedDirection[1] * 1;
-
-            // Draw ray number
-            push();
-            noStroke();
-            fill(255, 255, 0); // Yellow color for ray number
-            textAlign(CENTER, CENTER);
-            textSize(0.3);
-            text(index, rayNumberX, rayNumberY);
-
-            // Draw distance value
-            fill(255); // White color for distance
-            text(distance.toFixed(1), distanceTextX, distanceTextY);
-            pop();
+        // Normalize ray distances
+        this.rays.forEach(ray => {
+            inputs.push(ray.fraction);  // already between 0 and 1
         });
+
+        // Add normalized speed (assuming max speed of 10 m/s)
+        inputs.push(speed / 10);
+
+        // Add normalized steering angle
+        inputs.push(this.frontWheel.steerValue / Car.MAX_STEER);
+
+        // Get next checkpoint information from track using getter
+        const nextCheckpoint = this.gameWorld.getTrack().getNextCheckpoint(
+            this.chassisBody.position,
+            this.hitCheckpoints
+        );
+
+        if (nextCheckpoint) {
+            // Calculate angle to next checkpoint
+            const dx = nextCheckpoint.position.x - this.chassisBody.position[0];
+            const dy = nextCheckpoint.position.y - this.chassisBody.position[1];
+            const angleToCheckpoint = Math.atan2(dy, dx) - this.chassisBody.angle;
+            inputs.push(angleToCheckpoint / Math.PI); // Normalize between -1 and 1
+
+            // Normalized distance to checkpoint
+            const distanceToCheckpoint = Math.sqrt(dx * dx + dy * dy);
+            inputs.push(Math.min(distanceToCheckpoint / 20, 1)); // Max 20 units
+        } else {
+            inputs.push(0); // No next checkpoint
+            inputs.push(1); // Max distance
+        }
+
+        // Get predictions from neural network
+        const outputs = this.brain.predict(inputs);
+
+        // Apply actions
+        this.keys['38'] = outputs[0] > 0.5 ? 1 : 0; // Forward
+        this.keys['40'] = outputs[1] > 0.5 ? 1 : 0; // Backward
+        this.keys['37'] = outputs[2] > 0.5 ? 1 : 0; // Left
+        this.keys['39'] = outputs[3] > 0.5 ? 1 : 0; // Right
+
+        this.updateVehicleControls();
+    }
+
+    calculateFitness() {
+        // Base score from checkpoints reached
+        this.fitness = this.hitCheckpoints.size * 100;
+
+        // Penalty for wall collisions
+        this.fitness -= this.wallCollisions * 10;
+
+        // Bonus for average speed
+        if (this.raceTime > 0) {
+            this.fitness += (this.hitCheckpoints.size / this.raceTime) * 50;
+        }
+
+        return this.fitness;
+    }
+
+    // Add method to set initial position
+    setPosition(x, y, angle = -90) {
+        this.chassisBody.position = [x, y];
+        this.chassisBody.angle = angle * Math.PI / 180;
+    }
+
+    // Add method to check if car is moving
+    isMoving() {
+        const speed = Math.sqrt(
+            Math.pow(this.chassisBody.velocity[0], 2) +
+            Math.pow(this.chassisBody.velocity[1], 2)
+        );
+        return speed > Car.MIN_SPEED_FOR_TIMER;
+    }
+
+    // Add method to update timer
+    updateRaceProgress() {
+        if (this.gameWorld.isRaceStarted() && !this.hasFinished) {
+            this.raceTime = this.gameWorld.getRaceTime();
+        }
+    }
+
+    // Add setter for car index
+    setCarIndex(index) {
+        this.carIndex = index;
+    }
+
+    freeze() {
+        // Set velocity and angular velocity to 0
+        this.chassisBody.velocity = [0, 0];
+        this.chassisBody.angularVelocity = 0;
+
+        // Disable physics updates
+        this.chassisBody.type = p2.Body.STATIC;
+
+        // Reset controls
+        this.backWheel.engineForce = 0;
+        this.frontWheel.steerValue = 0;
+
+        // Set frozen state
+        this.frozen = true;
+    }
+
+    unfreeze() {
+        // Re-enable physics updates
+        this.chassisBody.type = Car.CHASSIS_TYPE;
+        this.frozen = false;
+    }
+
+    removeFromWorld() {
+        // Remove vehicle from world
+        this.vehicle.removeFromWorld();
+
+        // Remove chassis body from world
+        this.world.removeBody(this.chassisBody);
+    }
+
+    // Add method to reset checkpoint progress
+    resetCheckpoints() {
+        this.hitCheckpoints.clear();
+        this.checkpointTimes = [];
+        this.nextCheckpointIndex = 0;
+        this.allCheckpointsHit = false;
+    }
+
+    // Add new method for physics updates
+    updatePhysics(deltaTime) {
+        // Update vehicle physics
+        this.vehicle.update();
+
+        // Update chassis physics if needed
+        if (!this.frozen) {
+            this.chassisBody.wakeUp();
+        }
+    }
+
+    // Add method to calculate and update score
+    updateScore() {
+        // Get next checkpoint
+        const nextCheckpoint = this.gameWorld.getTrack().getNextCheckpoint(
+            this.chassisBody.position,
+            this.hitCheckpoints
+        );
+
+        let distanceToNext = Infinity;
+        if (nextCheckpoint) {
+            const dx = nextCheckpoint.position.x - this.chassisBody.position[0];
+            const dy = nextCheckpoint.position.y - this.chassisBody.position[1];
+            distanceToNext = Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Calculate weighted score
+        const checkpointScore = this.hitCheckpoints.size * Car.CHECKPOINT_WEIGHT;
+        const wallPenalty = this.wallCollisions * Car.WALL_PENALTY;
+        const distanceScore = distanceToNext * Car.DISTANCE_WEIGHT;
+
+        // Update score
+        this.score = checkpointScore + wallPenalty + distanceScore;
+        return this.score;
+    }
+
+    // Add new method to draw rays
+    drawRays() {
+        if (!this.debug) return;
+
+        push();
+        stroke(...Car.RAY_COLOR);
+        strokeWeight(0.1);
+
+        for (let i = 0; i < Car.RAY_COUNT; i++) {
+            const ray = this.rays[i];
+            // Swap x and y coordinates for drawing
+            const endX = ray.start[1] + (ray.end[1] - ray.start[1]) * ray.fraction;
+            const endY = ray.start[0] + (ray.end[0] - ray.start[0]) * ray.fraction;
+
+            // Draw the ray with swapped coordinates
+            line(ray.start[1], ray.start[0], endX, endY);
+
+            // Draw collision point with swapped coordinates
+            if (ray.fraction < 1) {
+                fill(255, 0, 0);
+                noStroke();
+                circle(endX, endY, 0.3);
+            }
+        }
         pop();
     }
 }
