@@ -1,6 +1,7 @@
 class Car {
     // Asset paths
-    static CAR_BODY_IMAGE_PATH = 'assets/f1_no_f_wheels.png';
+    static CAR_BODY_TRANSPARENT_PATH = 'assets/f1_transparent.png';
+    static CAR_BODY_GREEN_SCREEN_PATH = 'assets/f1_green_screen.png';
     static CAR_WHEEL_IMAGE_PATH = 'assets/f1_wheel.png';
 
     // Vehicle constants
@@ -32,13 +33,36 @@ class Car {
 
     static SCORE_DISPLAY_TIME = 5000;
 
-    constructor(gameWorld, menu = null, debug = false) {
+    // Define available car colors
+    static COLORS = {
+        RED: { r: 255, g: 0, b: 0 },      // Pure red
+        BLUE: { r: 0, g: 100, b: 255 },   // Pure blue
+        GREEN: { r: 0, g: 255, b: 0 },    // Pure green
+        ORANGE: { r: 255, g: 165, b: 0 }  // Pure orange
+    };
+
+    // Set default color
+    static CAR_COLOR = Car.COLORS.BLUE;
+
+    // Static method to change car color
+    static setCarColor(colorName) {
+        if (colorName in Car.COLORS) {
+            Car.CAR_COLOR = Car.COLORS[colorName];
+        } else {
+            console.warn(`Color ${colorName} not found, using default`);
+        }
+    }
+
+    constructor(gameWorld, menu = null, brain = null, debug = false) {
         this.gameWorld = gameWorld;
         this.world = gameWorld.getPhysicsWorld();
         this.debug = debug;
-        this.menu = menu; // Store menu reference
-        this.carBodyImage = null;
-        this.carWheelImage = null;
+        this.menu = menu;
+        this.brain = brain;
+        this.brain.setCar(this);
+
+        // Load images
+        this.loadImages();
 
         // Timer variables
         this.startTime = null;
@@ -51,9 +75,6 @@ class Car {
 
         // Wall collision counter
         this.wallCollisions = 0;
-
-        // Replace direct key handling with brain
-        this.brain = new HumanBrain();
 
         // Add rays array to store raycast results
         this.rays = Array(Car.RAY_COUNT).fill().map(() => ({
@@ -73,6 +94,50 @@ class Car {
 
         this.isCountingDown = true;
         this.display.hideAllMetrics();
+    }
+
+    loadImages() {
+        // Create a graphics buffer for the combined image
+        this.carBodyImage = createGraphics(27, 52); // Adjust size to match your images
+
+        // Load both car body images
+        loadImage(Car.CAR_BODY_GREEN_SCREEN_PATH, baseImg => {
+            baseImg.loadPixels();
+
+            // Replace green screen with desired color
+            for (let i = 0; i < baseImg.pixels.length; i += 4) {
+                const r = baseImg.pixels[i];
+                const g = baseImg.pixels[i + 1];
+                const b = baseImg.pixels[i + 2];
+                const a = baseImg.pixels[i + 3];
+
+                // Check if pixel is green screen (adjust values as needed)
+                if (g > 200 && r < 50 && b == 0) {
+                    // Replace with car color
+                    baseImg.pixels[i] = Car.CAR_COLOR.r;
+                    baseImg.pixels[i + 1] = Car.CAR_COLOR.g;
+                    baseImg.pixels[i + 2] = Car.CAR_COLOR.b;
+                }
+            }
+            baseImg.updatePixels();
+
+            // Load transparent overlay
+            loadImage(Car.CAR_BODY_TRANSPARENT_PATH, overlayImg => {
+                // Draw both images to the buffer
+                this.carBodyImage.image(baseImg, 0, 0);
+                this.carBodyImage.image(overlayImg, 0, 0);
+            });
+        });
+
+        // Load wheel image
+        this.carWheelImage = loadImage(Car.CAR_WHEEL_IMAGE_PATH);
+    }
+
+    // Helper method to check if a color matches within tolerance
+    colorMatch(r, g, b, targetColor, tolerance) {
+        return Math.abs(r - targetColor.r) < tolerance &&
+            Math.abs(g - targetColor.g) < tolerance &&
+            Math.abs(b - targetColor.b) < tolerance;
     }
 
     setupPhysics() {
@@ -232,7 +297,7 @@ class Car {
 
     update() {
         this.brain.update();
-        this.updateVehicleControls();
+        this.brain.drive();
     }
 
     moveViewToCar() {
@@ -254,14 +319,14 @@ class Car {
         translate(this.chassisBody.position[0], this.chassisBody.position[1]);
         rotate(this.chassisBody.angle + PI);
         imageMode(CENTER);
-        image(CAR_BODY_IMAGE, 0, 0, this.boxShape.width, this.boxShape.height);
+        image(this.carBodyImage, 0, 0, this.boxShape.width, this.boxShape.height);
 
         // Draw front wheels
         for (let side = -1; side <= 1; side += 2) {
             push();
             translate(side * Car.WHEEL_OFFSET_X, Car.WHEEL_OFFSET_Y);
             rotate(this.frontWheel.steerValue);
-            image(CAR_WHEEL_IMAGE, 0, 0, Car.WHEEL_WIDTH, Car.WHEEL_HEIGHT);
+            image(this.carWheelImage, 0, 0, Car.WHEEL_WIDTH, Car.WHEEL_HEIGHT);
             pop();
         }
         pop();

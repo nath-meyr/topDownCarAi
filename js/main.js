@@ -11,7 +11,9 @@ async function startGame(trackId, shouldCreateNew = true) {
         track.setup(trackId);
         gameWorld.setTrack(track);
 
-        car = new Car(gameWorld, menu, DEBUG);
+        // Create car with brain
+        const brain = new HumanBrain();
+        car = new Car(gameWorld, menu, brain, DEBUG);
         car.setTotalCheckpoints(track.getTotalCheckpoints());
     } else {
         // Reuse existing game instance
@@ -35,9 +37,7 @@ function setup() {
     // Initialize game world
     gameWorld = new GameWorld();
 
-    // Load assets
-    CAR_BODY_IMAGE = loadImage(Car.CAR_BODY_IMAGE_PATH);
-    CAR_WHEEL_IMAGE = loadImage(Car.CAR_WHEEL_IMAGE_PATH);
+    // Load game world assets
     gameWorld.loadAssets();
 
     // Create menu

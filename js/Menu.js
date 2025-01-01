@@ -90,7 +90,6 @@ class Menu {
 
         // Get top 5 scores for this track
         const scores = this.scoreManager.getScores(track.id).slice(0, 5);
-        console.log('Scores:', scores);
         if (scores.length > 0) {
             const scoresList = document.createElement('div');
             scoresList.style.marginBottom = '1rem';
@@ -166,7 +165,6 @@ class Menu {
     }
 
     updateScores() {
-        console.log('Updating scores');
         this.container.innerHTML = '';
         this.createMenu();
     }
