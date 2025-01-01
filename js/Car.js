@@ -70,6 +70,9 @@ class Car {
         this.scorePosition = null;
         this.scoreDisplayStartTime = null;
 
+        this.display = new Display();
+        this.display.positionElements();
+
         this.setupPhysics();
         this.setupEventListeners();
     }
@@ -145,8 +148,9 @@ class Car {
             this.backWheel.engineForce = 0;
             this.frontWheel.steerValue = 0;
 
-            // Add score to score manager
-            this.scorePosition = this.scoreManager.addScore(this.raceTime, this.checkpointTimes);
+            // Add score to score manager with track ID
+            const trackId = this.gameWorld.track.getCurrentTrackId();
+            this.scorePosition = this.scoreManager.addScore(trackId, this.raceTime, this.checkpointTimes);
             this.scoreDisplayStartTime = Date.now();
         }
     }
@@ -222,7 +226,7 @@ class Car {
             this.drawRays();
         }
         this.drawCar();
-        this.drawCarMetrics();
+        this.updateDisplay();
     }
 
     drawCar() {
@@ -243,126 +247,35 @@ class Car {
         pop();
     }
 
-    drawCarMetrics() {
-        // Base text size that scales with zoom level
-        const baseTextSize = 0.8 * (30 / this.gameWorld.getScaleFactor()); // Scales inversely with zoom
-        const padding = 1 * (30 / this.gameWorld.getScaleFactor()); // Padding that scales with zoom
+    updateDisplay() {
+        const speed = Math.sqrt(
+            Math.pow(this.chassisBody.velocity[0], 2) +
+            Math.pow(this.chassisBody.velocity[1], 2)
+        );
 
-        push();
-        fill(255);
-        noStroke();
-        textAlign(LEFT, TOP);
-        textSize(baseTextSize);
-
-        // Calculate screen bounds in physics units
-        const viewWidth = GameWorld.CANVAS_WIDTH / this.gameWorld.getScaleFactor();
-        const viewHeight = GameWorld.CANVAS_HEIGHT / this.gameWorld.getScaleFactor();
-
-        // Calculate positions relative to car's position
-        const screenLeft = this.chassisBody.position[0] - viewWidth / 2;
-        const screenTop = this.chassisBody.position[1] - viewHeight / 2;
-        const screenRight = screenLeft + viewWidth;
-
-        if (this.raceFinished) {
-            // Center position for finish message
-            const centerX = this.chassisBody.position[0];
-            const centerY = this.chassisBody.position[1];
-
-            textAlign(CENTER, CENTER);
-            textSize(baseTextSize * 2);
-            text("FINISH!", centerX, centerY - baseTextSize * 2);
-            text(this.raceTime.toFixed(2) + "s", centerX, centerY);
-
-            // Show position and best time
-            const bestScore = this.scoreManager.getBestScore();
-            textSize(baseTextSize * 1.5);
-            text(`Position: ${this.scorePosition}`, centerX, centerY + baseTextSize * 2);
-            text(`Wall Hits: ${this.wallCollisions}`, centerX, centerY + baseTextSize * 3); // Add wall collision display
-
-            if (bestScore) {
-                text(`Best: ${ScoreManager.formatTime(bestScore.totalTime)}`,
-                    centerX, centerY + baseTextSize * 4);
-            }
-
-            // Draw checkpoint times in a grid
-            textSize(baseTextSize);
-            const columnWidth = 6 * (30 / this.gameWorld.getScaleFactor());
-            const rowHeight = baseTextSize * 1.5;
-            const columnsCount = Math.min(4, Math.ceil(Math.sqrt(this.checkpointTimes.length)));
-
-            this.checkpointTimes.forEach((time, index) => {
-                const column = index % columnsCount;
-                const row = Math.floor(index / columnsCount);
-                const x = centerX + (column - (columnsCount - 1) / 2) * columnWidth;
-                const y = centerY + baseTextSize * 6 + row * rowHeight;
-                text(`CP${index + 1}: ${ScoreManager.formatTime(time)}`, x, y);
-            });
-        } else {
-            // Update race time
-            if (this.startTime !== null && !this.raceFinished) {
-                this.raceTime = (Date.now() - this.startTime) / 1000;
-            }
-            const rowHeight = baseTextSize * 1.4;
-
-            // Right-aligned time display (top right)
-            textAlign(RIGHT, TOP);
-            const timeText = `Time: ${this.raceTime.toFixed(2)}s`;
-            const timeTextWidth = textWidth(timeText);
-            const timeTextX = screenRight - timeTextWidth / 2;
-            const timeTextY = screenTop + rowHeight;
-            text(timeText, timeTextX, timeTextY);
-
-            // Checkpoint times (right side, below time)
-            const checkpointY = screenTop + rowHeight;
-
-            // Show only last 3 checkpoints during race for compact display
-            const recentCheckpoints = this.checkpointTimes.slice(-3);
-            const startIndex = Math.max(0, this.checkpointTimes.length - 3);
-
-            // Calculate max text width for alignment
-            let maxTextWidth = 0;
-            recentCheckpoints.forEach((time, idx) => {
-                const actualIndex = startIndex + idx;
-                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
-                const textW = textWidth(cpText);
-                maxTextWidth = Math.max(maxTextWidth, textW) / 2;
-            });
-
-            recentCheckpoints.forEach((time, idx) => {
-                const actualIndex = startIndex + idx;
-                const y = checkpointY + (idx + 1) * rowHeight;
-                const cpText = `CP${actualIndex + 1}: ${time.toFixed(2)}s`;
-
-                // Align text based on its width
-                const x = screenRight - maxTextWidth;
-                text(cpText, x, y);
-            });
-            // Left-aligned displays (speed and checkpoint progress)
-            textAlign(LEFT, TOP);
-
-            // Speed display
-            const carSpeed = Math.sqrt(
-                Math.pow(this.chassisBody.velocity[0], 2) +
-                Math.pow(this.chassisBody.velocity[1], 2)
-            ).toFixed(2);
-            const speedX = screenLeft + padding;
-            const speedY = screenTop + rowHeight;
-            text(`Speed: ${carSpeed} m/s`, speedX, speedY);
-
-            // Checkpoint progress
-            const progressText = `Checkpoints: ${this.hitCheckpoints.size}/${this.totalCheckpoints}`;
-            const progressX = screenLeft + padding;
-            const progressY = screenTop + 2 * rowHeight;
-            text(progressText, progressX, progressY);
-
-            // Wall collisions display
-            const wallText = `Wall Hits: ${this.wallCollisions}`;
-            const wallX = screenLeft + padding;
-            const wallY = screenTop + 3 * rowHeight;
-            text(wallText, wallX, wallY);
+        // Update race time
+        if (this.startTime !== null && !this.raceFinished) {
+            this.raceTime = (Date.now() - this.startTime) / 1000;
         }
 
-        pop();
+        // Update display elements
+        this.display.updateSpeed(speed);
+        this.display.updateTime(this.raceTime);
+        this.display.updateCheckpoints(this.hitCheckpoints.size, this.totalCheckpoints);
+        this.display.updateWallHits(this.wallCollisions);
+
+        if (this.raceFinished) {
+            const trackId = this.gameWorld.track.getCurrentTrackId();
+            const bestScore = this.scoreManager.getBestScore(trackId);
+            this.display.showFinish({
+                time: this.raceTime,
+                position: this.scorePosition,
+                wallHits: this.wallCollisions,
+                bestTime: bestScore ? bestScore.totalTime : null,
+                checkpointTimes: this.checkpointTimes,
+                trackName: this.gameWorld.track.getCurrentTrackName() // Add track name to display
+            });
+        }
     }
 
     setTotalCheckpoints(total) {

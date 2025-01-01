@@ -24,6 +24,55 @@ class Track {
         FINISH: Math.pow(2, 4)
     };
 
+    static TRACKS = [
+        {
+            id: 'roundabout',
+            name: 'Roundabout',
+            definition: [
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 5 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 20 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 5 },
+                { type: 'c', radius: 6, direction: 'l' },
+            ]
+        },
+        {
+            id: 'complex',
+            name: 'Complex Circuit',
+            definition: [
+                { type: 's', length: 40 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 30 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 30 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 30 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 60 },
+                { type: 'c', radius: 6, direction: 'l', angle: 45 },
+                { type: 's', length: 20 },
+                { type: 'c', radius: 6, direction: 'l', angle: 45 },
+                { type: 's', length: 16 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 5 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 30 },
+                { type: 'c', radius: 6, direction: 'l' },
+            ]
+        }
+    ];
+
     type = 'loop';
     track = [];
     checkpoints = [];
@@ -33,46 +82,32 @@ class Track {
         isStatic: true,
         collisionResponse: true
     };
-    trackDefinition = [
-        { type: 's', length: 40 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 30 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 10 },
-        { type: 'c', radius: 6, direction: 'r' },
-        { type: 's', length: 10 },
-        { type: 'c', radius: 6, direction: 'r' },
-        { type: 's', length: 30 },
-        { type: 'c', radius: 6, direction: 'r' },
-        { type: 's', length: 10 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 10 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 30 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 60 },
-        { type: 'c', radius: 6, direction: 'l', angle: 45 },
-        { type: 's', length: 20 },
-        { type: 'c', radius: 6, direction: 'l', angle: 45 },
-        { type: 's', length: 16 },
-        { type: 'c', radius: 6, direction: 'r' },
-        { type: 's', length: 5 },
-        { type: 'c', radius: 6, direction: 'l' },
-        { type: 's', length: 30 },
-        { type: 'c', radius: 6, direction: 'l' },
-    ];
+    currentTrack = null;
 
     constructor(world, debug = false) {
         this.world = world;
         this.debug = debug;
     }
 
-    setup() {
+    setup(trackId = 'figure8') {
+        // Find the track by ID
+        this.currentTrack = Track.TRACKS.find(track => track.id === trackId);
+        if (!this.currentTrack) {
+            console.error(`Track with id "${trackId}" not found`);
+            this.currentTrack = Track.TRACKS[0];
+        }
+
+        // Reset track state
+        this.checkpoints = [];
+        this.startLine = null;
+        this.finishLine = null;
+
         let currentPosition = createVector(0, 0);
         let currentAngle = 0;
         let startPosition = currentPosition.copy();
 
-        for (let segment of this.trackDefinition) {
+        // Use the track definition from the current track
+        for (let segment of this.currentTrack.definition) {
             if (segment.type === 'straight' || segment.type === 's') {
                 this.createStraightWalls(segment, currentPosition, currentAngle);
                 let angleRad = radians(currentAngle);
@@ -350,7 +385,7 @@ class Track {
         let wallsInstructions = [];
 
         // Gather all drawing instructions
-        for (let segment of this.trackDefinition) {
+        for (let segment of this.currentTrack.definition) {
             if (segment.type === 'straight' || segment.type === 's') {
                 const drawData = this.drawStraightSegment(segment, currentPosition, currentAngle);
                 roadSurfaceInstructions.push({ type: 'straight', data: drawData.roadSurface });
@@ -557,5 +592,13 @@ class Track {
 
     getTotalCheckpoints() {
         return this.checkpoints.length;
+    }
+
+    getCurrentTrackId() {
+        return this.currentTrack?.id;
+    }
+
+    getCurrentTrackName() {
+        return this.currentTrack?.name;
     }
 }

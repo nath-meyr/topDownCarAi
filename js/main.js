@@ -1,8 +1,18 @@
 // Debug flag
 const DEBUG = true;
 let gameWorld;
-let track;
 let car;
+let menu;
+
+function startGame(trackId) {
+    // Initialize track and car
+    const track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
+    track.setup(trackId);
+    gameWorld.setTrack(track);
+
+    car = new Car(gameWorld, DEBUG);
+    car.setTotalCheckpoints(track.getTotalCheckpoints());
+}
 
 function setup() {
     createCanvas(GameWorld.CANVAS_WIDTH, GameWorld.CANVAS_HEIGHT);
@@ -16,15 +26,17 @@ function setup() {
     CAR_WHEEL_IMAGE = loadImage(Car.CAR_WHEEL_IMAGE_PATH);
     gameWorld.loadAssets();
 
-    // Initialize track and car
-    track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
-    track.setup();
-
-    car = new Car(gameWorld, DEBUG);
-    car.setTotalCheckpoints(track.getTotalCheckpoints());
+    // Create menu
+    menu = new Menu(trackId => {
+        startGame(trackId);
+    });
 }
 
 function draw() {
+    if (!gameWorld.getTrack()) {
+        return; // Don't draw anything until track is selected
+    }
+
     // Get car speed for scale factor calculation
     const carSpeed = Math.sqrt(
         Math.pow(car.chassisBody.velocity[0], 2) +
@@ -43,9 +55,16 @@ function draw() {
     car.moveViewToCar();
     gameWorld.drawGrass();
 
-    track.draw();
+    gameWorld.getTrack().draw();
     car.draw();
 
     pop();
+}
+
+// Add key handler to return to menu
+function keyPressed() {
+    if (keyCode === ESCAPE) {
+        menu.show();
+    }
 }
 

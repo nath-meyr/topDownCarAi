@@ -1,38 +1,44 @@
 class ScoreManager {
     constructor() {
-        this.scores = this.loadScores();
+        this.scores = {};
+        this.loadScores();
     }
 
     // Add a new score entry
-    addScore(totalTime, checkpointTimes) {
+    addScore(trackId, totalTime, checkpointTimes) {
+        if (!this.scores[trackId]) {
+            this.scores[trackId] = [];
+        }
+
         const score = {
             date: new Date().toISOString(),
             totalTime: totalTime,
             checkpointTimes: checkpointTimes
         };
 
-        this.scores.push(score);
-        this.scores.sort((a, b) => a.totalTime - b.totalTime); // Sort by best time
-        this.scores = this.scores.slice(0, 10); // Keep only top 10 scores
+        this.scores[trackId].push(score);
+        this.scores[trackId].sort((a, b) => a.totalTime - b.totalTime); // Sort by best time
+        this.scores[trackId] = this.scores[trackId].slice(0, 10); // Keep only top 10 scores
         this.saveScores();
 
-        return this.getScorePosition(totalTime);
+        return this.getScorePosition(trackId, totalTime);
     }
 
     // Get the position of a score in the leaderboard (1-based)
-    getScorePosition(time) {
-        return this.scores.findIndex(score => score.totalTime === time) + 1;
+    getScorePosition(trackId, time) {
+        if (!this.scores[trackId]) return 1;
+        return this.scores[trackId].findIndex(score => score.totalTime === time) + 1;
     }
 
-    // Get all scores
-    getScores() {
-        return this.scores;
+    // Get all scores for a specific track
+    getScores(trackId) {
+        return this.scores[trackId] || [];
     }
 
     // Load scores from localStorage
     loadScores() {
         const savedScores = localStorage.getItem('raceScores');
-        return savedScores ? JSON.parse(savedScores) : [];
+        this.scores = savedScores ? JSON.parse(savedScores) : {};
     }
 
     // Save scores to localStorage
@@ -40,9 +46,9 @@ class ScoreManager {
         localStorage.setItem('raceScores', JSON.stringify(this.scores));
     }
 
-    // Get the best score
-    getBestScore() {
-        return this.scores.length > 0 ? this.scores[0] : null;
+    // Get the best score for a specific track
+    getBestScore(trackId) {
+        return this.scores[trackId]?.length > 0 ? this.scores[trackId][0] : null;
     }
 
     // Format time to display minutes:seconds.milliseconds

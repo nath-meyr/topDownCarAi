@@ -31,6 +31,9 @@ class GameWorld {
             width: GameWorld.WALL_MULTIPLIER * this.physicsWidth,
             height: GameWorld.WALL_MULTIPLIER * this.physicsHeight
         };
+
+        // Add track property
+        this.track = null;
     }
 
     loadAssets() {
@@ -97,5 +100,13 @@ class GameWorld {
 
     getPhysicsWorld() {
         return this.world;
+    }
+
+    setTrack(track) {
+        this.track = track;
+    }
+
+    getTrack() {
+        return this.track;
     }
 }

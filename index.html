@@ -9,8 +9,10 @@
     <script src="./build/p2.renderer.js"></script>
     <script src="./js/World.js"></script>
     <script src="./js/Track.js"></script>
+    <script src="./js/Display.js"></script>
     <script src="./js/Car.js"></script>
     <script src="./js/ScoreManager.js"></script>
+    <script src="./js/Menu.js"></script>
     <style>
         html,
         body {
@@ -19,6 +21,17 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #game-overlay {
+            z-index: 2;
         }
     </style>
     <meta name="description" content="">
