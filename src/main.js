@@ -4,10 +4,6 @@ let gameWorld;
 let car;
 let menu;
 
-// Add brain type tracking
-let currentBrainType = 'ai'; // or 'ai'
-let trainingData = [];
-
 async function startGame(trackId, shouldCreateNew = true) {
     if (shouldCreateNew) {
         // Initialize track and car
@@ -15,16 +11,8 @@ async function startGame(trackId, shouldCreateNew = true) {
         track.setup(trackId);
         gameWorld.setTrack(track);
 
-        // Create brain based on type
-        const brain = currentBrainType === 'human' ?
-            new HumanBrain() :
-            new NeuralBrain();
-
-        // If AI brain, try to load saved weights
-        if (currentBrainType === 'ai') {
-            await brain.loadWeights();
-        }
-
+        // Create human brain
+        const brain = new HumanBrain();
         car = new Car(gameWorld, menu, brain, null, DEBUG);
         car.setTotalCheckpoints(track.getTotalCheckpoints());
     } else {
@@ -99,40 +87,6 @@ function keyPressed() {
         } else {
             menu.show();
         }
-    } else if (keyCode === 84) { // 'T' key
-        toggleBrain();
-    } else if (keyCode === 82) { // 'R' key
-        recordTraining();
-    } else if (keyCode === 76) { // 'L' key
-        trainAI();
     }
-}
-
-// Add function to toggle brain type
-async function toggleBrain() {
-    currentBrainType = currentBrainType === 'human' ? 'ai' : 'human';
-    // Restart game with new brain
-    startGame(gameWorld.getTrack().getCurrentTrackId(), true);
-}
-
-// Add function to record human training data
-function recordTraining() {
-    if (car && car.brain instanceof HumanBrain) {
-        const state = car.brain.getState();
-        trainingData.push(state);
-    }
-}
-
-// Add function to train AI with recorded data
-async function trainAI() {
-    if (trainingData.length === 0) {
-        console.log('No training data available');
-        return;
-    }
-
-    const aiBrain = new NeuralBrain();
-    await aiBrain.train(trainingData);
-    await aiBrain.saveWeights();
-    console.log('AI trained with', trainingData.length, 'samples');
 }
 
