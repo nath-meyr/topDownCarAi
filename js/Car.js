@@ -41,25 +41,21 @@ class Car {
         ORANGE: { r: 255, g: 165, b: 0 }  // Pure orange
     };
 
-    // Set default color
-    static CAR_COLOR = Car.COLORS.BLUE;
-
-    // Static method to change car color
-    static setCarColor(colorName) {
-        if (colorName in Car.COLORS) {
-            Car.CAR_COLOR = Car.COLORS[colorName];
-        } else {
-            console.warn(`Color ${colorName} not found, using default`);
-        }
-    }
-
-    constructor(gameWorld, menu = null, brain = null, debug = false) {
+    constructor(gameWorld, menu = null, brain = null, color = null, debug = false) {
         this.gameWorld = gameWorld;
         this.world = gameWorld.getPhysicsWorld();
         this.debug = debug;
         this.menu = menu;
         this.brain = brain;
         this.brain.setCar(this);
+
+        // Set car color - if none provided, pick random from COLORS
+        if (color) {
+            this.carColor = color;
+        } else {
+            const colors = Object.values(Car.COLORS);
+            this.carColor = colors[Math.floor(Math.random() * colors.length)];
+        }
 
         // Load images
         this.loadImages();
@@ -98,7 +94,7 @@ class Car {
 
     loadImages() {
         // Create a graphics buffer for the combined image
-        this.carBodyImage = createGraphics(27, 52); // Adjust size to match your images
+        this.carBodyImage = createGraphics(27, 52);
 
         // Load both car body images
         loadImage(Car.CAR_BODY_GREEN_SCREEN_PATH, baseImg => {
@@ -114,9 +110,9 @@ class Car {
                 // Check if pixel is green screen (adjust values as needed)
                 if (g > 200 && r < 50 && b == 0) {
                     // Replace with car color
-                    baseImg.pixels[i] = Car.CAR_COLOR.r;
-                    baseImg.pixels[i + 1] = Car.CAR_COLOR.g;
-                    baseImg.pixels[i + 2] = Car.CAR_COLOR.b;
+                    baseImg.pixels[i] = this.carColor.r;
+                    baseImg.pixels[i + 1] = this.carColor.g;
+                    baseImg.pixels[i + 2] = this.carColor.b;
                 }
             }
             baseImg.updatePixels();

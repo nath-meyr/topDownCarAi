@@ -11,9 +11,10 @@ async function startGame(trackId, shouldCreateNew = true) {
         track.setup(trackId);
         gameWorld.setTrack(track);
 
-        // Create car with brain
+        // Create car with brain and optional color
         const brain = new HumanBrain();
-        car = new Car(gameWorld, menu, brain, DEBUG);
+        const color = { r: 255, g: 94, b: 0 };
+        car = new Car(gameWorld, menu, brain, color, DEBUG);
         car.setTotalCheckpoints(track.getTotalCheckpoints());
     } else {
         // Reuse existing game instance
