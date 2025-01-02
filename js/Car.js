@@ -26,9 +26,9 @@ class Car {
     static MAX_STEER = Math.PI / 4;
 
     static RAY_LENGTH = 20;
-    static RAY_COUNT = 5;
-    static RAY_SPREAD = Math.PI;
-    static RAY_DEVIATION = 0;
+    static RAY_COUNT = 9;
+    static RAY_SPREAD = 120;
+    static RAY_DEVIATION = 30;
     static RAY_COLOR = [255, 165, 0, 128];
 
     static SCORE_DISPLAY_TIME = 5000;
@@ -366,13 +366,16 @@ class Car {
     }
 
     updateRays() {
-        // Calculate the angle step for rays spread across 360 degrees
-        const rayAngleStep = Car.RAY_SPREAD / (Car.RAY_COUNT - 1);
+        // Convert degrees to radians for calculations
+        const raySpreadRad = radians(Car.RAY_SPREAD);
+        const rayDeviationRad = radians(Car.RAY_DEVIATION);
+
+        // Calculate the angle step for rays spread across the specified degrees
+        const rayAngleStep = raySpreadRad / (Car.RAY_COUNT - 1);
 
         for (let i = 0; i < Car.RAY_COUNT; i++) {
-            // Calculate ray angle to spread evenly around the car
-            // Start at 90 degrees (PI/2) and go counter-clockwise
-            const rayAngle = Car.RAY_DEVIATION + i * rayAngleStep;
+            // Calculate ray angle to spread evenly
+            const rayAngle = rayDeviationRad + i * rayAngleStep;
             const globalAngle = this.chassisBody.angle + rayAngle;
 
             // Calculate ray start point (car's position)
