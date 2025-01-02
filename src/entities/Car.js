@@ -1,8 +1,8 @@
 class Car {
     // Asset paths
-    static CAR_BODY_TRANSPARENT_PATH = 'assets/f1_transparent.png';
-    static CAR_BODY_GREEN_SCREEN_PATH = 'assets/f1_green_screen.png';
-    static CAR_WHEEL_IMAGE_PATH = 'assets/f1_wheel.png';
+    static CAR_BODY_TRANSPARENT_PATH = 'assets/images/f1_transparent.png';
+    static CAR_BODY_GREEN_SCREEN_PATH = 'assets/images/f1_green_screen.png';
+    static CAR_WHEEL_IMAGE_PATH = 'assets/images/f1_wheel.png';
 
     // Vehicle constants
     static CHASSIS_MASS = 1;
@@ -25,7 +25,7 @@ class Car {
 
     static MAX_STEER = Math.PI / 4;
 
-    static RAY_LENGTH = 20;
+    static RAY_LENGTH = 30;
     static RAY_COUNT = 9;
     static RAY_SPREAD = 120;
     static RAY_DEVIATION = 30;

@@ -4,16 +4,26 @@
 <head>
     <title>Top down vehicle demo - p2.js physics engine</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <script src="./build/p5.js"></script>
-    <script src="./build/p2.js"></script>
-    <script src="./build/p2.renderer.js"></script>
-    <script src="./js/World.js"></script>
-    <script src="./js/Track.js"></script>
-    <script src="./js/Display.js"></script>
-    <script src="./js/Car.js"></script>
-    <script src="./js/ScoreManager.js"></script>
-    <script src="./js/Menu.js"></script>
-    <script src="./js/Brain.js"></script>
+    <!-- Libraries -->
+    <script src="./assets/libs/p5.js"></script>
+    <script src="./assets/libs/p2.js"></script>
+    <script src="./assets/libs/p2.renderer.js"></script>
+
+    <!-- Game Core -->
+    <script src="./src/entities/World.js"></script>
+    <script src="./src/entities/Track.js"></script>
+    <script src="./src/entities/Car.js"></script>
+
+    <!-- UI -->
+    <script src="./src/ui/ScoreManager.js"></script>
+    <script src="./src/ui/Display.js"></script>
+    <script src="./src/ui/Menu.js"></script>
+
+    <!-- Brains -->
+    <script src="./src/brains/Brain.js"></script>
+    <script src="./src/brains/HumanBrain.js"></script>
+    <script src="./src/brains/NeuralBrain.js"></script>
+
     <style>
         html,
         body {
@@ -41,7 +51,7 @@
 </head>
 
 <body>
-    <script src="./js/main.js"></script>
+    <script src="./src/main.js"></script>
 </body>
 
 </html>

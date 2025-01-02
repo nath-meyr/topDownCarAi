@@ -37,7 +37,7 @@ class GameWorld {
     }
 
     loadAssets() {
-        this.grassImage = loadImage('assets/grass_1.avif');
+        this.grassImage = loadImage('assets/images/grass_1.avif');
     }
 
     drawGrass() {
