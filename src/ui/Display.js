@@ -1,21 +1,36 @@
 class Display {
-    constructor(onRestart) {
+    static instance = null;
+
+    static getInstance() {
+        if (!Display.instance) {
+            Display.instance = new Display();
+        }
+        return Display.instance;
+    }
+
+    constructor() {
+        if (Display.instance) {
+            return Display.instance;
+        }
+
         this.container = this.createContainer();
-        this.onRestart = onRestart;
         this.elements = {
             speed: this.createMetricElement('speed'),
             time: this.createMetricElement('time'),
             checkpoints: this.createMetricElement('checkpoints'),
-            wallHits: this.createMetricElement('wallHits'),
+            focusedCar: this.createMetricElement('focusedCar'),
+            selectedCars: this.createMetricElement('selectedCars'),
+            generation: this.createMetricElement('generation'),
+            controls: this.createMetricElement('controls'),
             finish: this.createFinishOverlay(),
-            countdown: this.createCountdownElement()
+            countdown: this.createCountdownElement(),
+            pause: this.createPauseOverlay(),
+            leaderboard: this.createLeaderboard()
         };
+        this.focusedCar = null;
 
-        // Initialize finish overlay content structure
-        this.finishElements = this.createFinishElements();
-
-        // Track the maximum number of checkpoints we've seen
-        this.maxCheckpoints = 0;
+        this.positionElements();
+        Display.instance = this;
     }
 
     createContainer() {
@@ -45,6 +60,7 @@ class Display {
             border-radius: 5px;
             font-size: 18px;
             pointer-events: none;
+            display: none;
         `;
         this.container.appendChild(element);
         return element;
@@ -56,15 +72,17 @@ class Display {
         element.style.cssText = `
             position: absolute;
             top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0,0,0,0.8);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
+            right: 20px;
+            transform: translateY(-50%);
+            background-color: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
             display: none;
-            min-width: 400px;
+            min-width: 250px;
+            max-width: 300px;
             pointer-events: auto;
+            font-size: 14px;
         `;
         this.container.appendChild(element);
         return element;
@@ -78,13 +96,56 @@ class Display {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 120px;
-            font-weight: bold;
+            font-size: 48px;
             color: white;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             display: none;
             z-index: 1000;
             pointer-events: none;
+        `;
+        this.container.appendChild(element);
+        return element;
+    }
+
+    createPauseOverlay() {
+        const element = document.createElement('div');
+        element.id = 'pause-overlay';
+        element.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            font-size: 36px;
+            color: white;
+            z-index: 1000;
+        `;
+        element.textContent = 'PAUSED';
+        this.container.appendChild(element);
+        return element;
+    }
+
+    createLeaderboard() {
+        const element = document.createElement('div');
+        element.id = 'leaderboard';
+        element.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
+            background-color: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            display: none;
+            min-width: 250px;
+            max-width: 300px;
+            pointer-events: auto;
+            font-size: 14px;
         `;
         this.container.appendChild(element);
         return element;
@@ -103,9 +164,91 @@ class Display {
         this.elements.checkpoints.style.top = '70px';
         this.elements.checkpoints.style.left = '20px';
 
-        // Position wall hits display (top left, below checkpoints)
-        this.elements.wallHits.style.top = '120px';
-        this.elements.wallHits.style.left = '20px';
+        // Position focused car display (top left, below checkpoints)
+        this.elements.focusedCar.style.top = '120px';
+        this.elements.focusedCar.style.left = '20px';
+
+        // Position selected cars display (top left, below focused car)
+        this.elements.selectedCars.style.top = '170px';
+        this.elements.selectedCars.style.left = '20px';
+
+        // Position generation counter (bottom left)
+        this.elements.generation.style.bottom = '20px';
+        this.elements.generation.style.left = '20px';
+
+        // Position controls info (bottom right)
+        this.elements.controls.style.bottom = '20px';
+        this.elements.controls.style.right = '20px';
+        this.elements.controls.innerHTML = 'Controls:<br>' +
+            'SPACE - Cycle Focus<br>' +
+            'ENTER - Select Car<br>' +
+            'E - Evolve Selected Cars<br>' +
+            'R - Restart Generation<br>' +
+            'X - Reset Evolution<br>' +
+            'P - Pause/Resume<br>' +
+            'Z - Undo Last Evolution<br>' +
+            'B - Focus Best Car<br>' +
+            '1-9,0 - Focus Car 1-10';
+    }
+
+    showAllMetrics() {
+        this.elements.speed.style.display = 'block';
+        this.elements.time.style.display = 'block';
+        this.elements.checkpoints.style.display = 'block';
+        this.elements.focusedCar.style.display = 'block';
+        this.elements.selectedCars.style.display = 'block';
+        this.elements.generation.style.display = 'block';
+        this.elements.controls.style.display = 'block';
+    }
+
+    hideAllMetrics() {
+        this.elements.speed.style.display = 'none';
+        this.elements.time.style.display = 'none';
+        this.elements.checkpoints.style.display = 'none';
+        this.elements.focusedCar.style.display = 'none';
+        this.elements.selectedCars.style.display = 'none';
+        this.elements.generation.style.display = 'none';
+        this.elements.controls.style.display = 'none';
+        this.elements.finish.style.display = 'none';
+    }
+
+    updateForCar(car, raceTime = 0) {
+        if (!car) return;
+
+        const speed = Math.sqrt(
+            Math.pow(car.chassisBody.velocity[0], 2) +
+            Math.pow(car.chassisBody.velocity[1], 2)
+        );
+
+        this.updateSpeed(speed);
+        this.updateTime(car.raceFinished ? car.finishTime : car.raceTime);
+        this.updateCheckpoints(car.hitCheckpoints.size, car.totalCheckpoints);
+        this.updateFocusedCar(car.carNumber);
+
+        // Update focused car reference
+        this.focusedCar = car.isFocused ? car : null;
+
+        // Show/hide finish overlay and leaderboard based on focused car's state
+        if (car.isFocused) {
+            if (car.raceFinished) {
+                // Show both finish overlay and leaderboard when focused car finishes
+                this.showFinish({
+                    time: car.finishTime,
+                    checkpointTimes: car.checkpointTimes
+                });
+                this.elements.leaderboard.style.display = 'block';
+                this.elements.leaderboard.style.zIndex = '1';
+
+                // Update leaderboard to show this car's position
+                if (car.gameWorld?.geneticManager) {
+                    this.updateLeaderboard(car.gameWorld.geneticManager.scores, car.gameWorld.geneticManager.generation);
+                }
+            } else {
+                // Hide both overlays when focused car hasn't finished
+                this.elements.finish.style.display = 'none';
+                this.elements.leaderboard.style.display = 'none';
+            }
+        }
     }
 
     updateSpeed(speed) {
@@ -113,166 +256,129 @@ class Display {
     }
 
     updateTime(time) {
-        this.elements.time.textContent = `Time: ${time.toFixed(2)}s`;
+        this.elements.time.textContent = `Time: ${time ? time.toFixed(2) : '0.00'}s`;
     }
 
     updateCheckpoints(current, total) {
         this.elements.checkpoints.textContent = `Checkpoints: ${current}/${total}`;
     }
 
-    updateWallHits(hits) {
-        this.elements.wallHits.textContent = `Wall Hits: ${hits}`;
-    }
-
-    createRestartButton() {
-        const button = document.createElement('button');
-        button.textContent = 'Restart Race';
-        button.style.cssText = `
-            background-color: #4CAF50;
-            border: none;
-            color: white;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-            pointer-events: auto;
-        `;
-
-        button.addEventListener('mouseenter', () => {
-            button.style.backgroundColor = '#45a049';
-        });
-
-        button.addEventListener('mouseleave', () => {
-            button.style.backgroundColor = '#4CAF50';
-        });
-
-        button.addEventListener('click', () => {
-            this.hideFinish();
-            if (this.onRestart) this.onRestart();
-        });
-
-        return button;
-    }
-
-    createFinishElements() {
-        const elements = {
-            title: document.createElement('h2'),
-            trackName: document.createElement('h3'),
-            time: document.createElement('p'),
-            position: document.createElement('p'),
-            wallHits: document.createElement('p'),
-            bestTime: document.createElement('p'),
-            checkpointGrid: document.createElement('div'),
-            buttonContainer: document.createElement('div'),
-            checkpoints: [] // Array to store checkpoint elements
-        };
-
-        // Set up static styles
-        elements.title.style.margin = '0 0 15px 0';
-        elements.title.textContent = 'FINISH!';
-
-        elements.trackName.style.margin = '0 0 10px 0';
-
-        elements.time.style.margin = '5px 0';
-        elements.position.style.margin = '5px 0';
-        elements.wallHits.style.margin = '5px 0';
-        elements.bestTime.style.margin = '5px 0';
-
-        elements.checkpointGrid.style.cssText = `
-            display: grid;
-            gap: 10px;
-            margin-top: 15px;
-            justify-items: center;
-        `;
-
-        // Create initial checkpoint elements (we'll show/hide as needed)
-        for (let i = 0; i < 20; i++) { // Pre-create 20 checkpoint elements
-            const checkpointElement = document.createElement('div');
-            checkpointElement.style.display = 'none'; // Hide by default
-            elements.checkpointGrid.appendChild(checkpointElement);
-            elements.checkpoints.push(checkpointElement);
-        }
-
-        elements.buttonContainer.style.marginTop = '20px';
-        elements.buttonContainer.appendChild(this.createRestartButton());
-
-        // Add elements to finish overlay
-        const finish = this.elements.finish;
-        finish.appendChild(elements.title);
-        finish.appendChild(elements.trackName);
-        finish.appendChild(elements.time);
-        finish.appendChild(elements.position);
-        finish.appendChild(elements.wallHits);
-        finish.appendChild(elements.bestTime);
-        finish.appendChild(elements.checkpointGrid);
-        finish.appendChild(elements.buttonContainer);
-
-        return elements;
+    updateFocusedCar(carNumber) {
+        this.elements.focusedCar.textContent = `Focused Car: #${carNumber}`;
     }
 
     showFinish(data) {
-        // Update content
-        this.finishElements.trackName.textContent = data.trackName;
-        this.finishElements.time.textContent = `Time: ${data.time.toFixed(2)}s`;
-        this.finishElements.position.textContent = `Position: ${data.position}`;
-        this.finishElements.wallHits.textContent = `Wall Hits: ${data.wallHits}`;
-        this.finishElements.bestTime.textContent = data.bestTime ?
-            `Best: ${ScoreManager.formatTime(data.bestTime)}` : '';
-
-        // Update checkpoint grid layout
-        const columnsCount = Math.min(4, Math.ceil(Math.sqrt(data.checkpointTimes.length)));
-        this.finishElements.checkpointGrid.style.gridTemplateColumns = `repeat(${columnsCount}, 1fr)`;
-
-        // Update checkpoint times and visibility
-        const checkpointCount = data.checkpointTimes.length;
-        this.finishElements.checkpoints.forEach((element, index) => {
-            if (index < checkpointCount) {
-                element.textContent = `CP${index + 1}: ${ScoreManager.formatTime(data.checkpointTimes[index])}`;
-                element.style.display = 'block';
-            } else {
-                element.style.display = 'none';
-            }
-        });
-
-        // Show overlay
+        // Show finish overlay
         this.elements.finish.style.display = 'block';
-    }
-
-    hideFinish() {
-        this.elements.finish.style.display = 'none';
+        this.elements.finish.style.zIndex = '2'; // Ensure finish overlay is above leaderboard
+        this.elements.finish.innerHTML = `
+            <h2 style="margin: 0 0 10px 0; font-size: 18px;">Race Complete!</h2>
+            <div style="margin: 5px 0;">Time: ${data.time ? data.time.toFixed(2) : '0.00'}s</div>
+            <div style="margin: 10px 0 5px 0; font-weight: bold;">Checkpoint Times:</div>
+            ${data.checkpointTimes && Object.keys(data.checkpointTimes).length > 0 ?
+                Object.entries(data.checkpointTimes)
+                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                    .map(([index, time]) => `
+                        <div style="margin: 2px 0;">CP ${parseInt(index) + 1}: ${time ? time.toFixed(2) : '0.00'}s</div>
+                    `).join('')
+                : '<div style="margin: 5px 0;">No checkpoint times recorded</div>'
+            }
+        `;
     }
 
     async startCountdown(onComplete) {
         this.elements.countdown.style.display = 'block';
-
         for (let i = 3; i > 0; i--) {
             this.elements.countdown.textContent = i;
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
-
         this.elements.countdown.textContent = 'GO!';
         await new Promise(resolve => setTimeout(resolve, 1000));
-
         this.elements.countdown.style.display = 'none';
-        if (onComplete) onComplete();
+        onComplete();
     }
 
-    hideAllMetrics() {
-        this.elements.speed.style.display = 'none';
-        this.elements.time.style.display = 'none';
-        this.elements.checkpoints.style.display = 'none';
-        this.elements.wallHits.style.display = 'none';
+    updateGeneration(generation) {
+        this.elements.generation.textContent = `Generation: ${generation}`;
     }
 
-    showAllMetrics() {
-        this.elements.speed.style.display = 'block';
-        this.elements.time.style.display = 'block';
-        this.elements.checkpoints.style.display = 'block';
-        this.elements.wallHits.style.display = 'block';
+    updateSelectedCars(selectedCars) {
+        if (selectedCars.length === 0) {
+            this.elements.selectedCars.textContent = 'Selected Cars: none';
+        } else {
+            const carNumbers = selectedCars.map(car => car.carNumber).sort((a, b) => a - b);
+            this.elements.selectedCars.textContent = `Selected Cars: #${carNumbers.join(', #')}`;
+        }
+    }
+
+    showPauseOverlay(isPaused) {
+        this.elements.pause.style.display = isPaused ? 'block' : 'none';
+    }
+
+    updateLeaderboard(scores, currentGeneration) {
+        if (!scores || scores.length === 0) {
+            return;
+        }
+
+        // Get focused car's score if it exists
+        const focusedCar = this.focusedCar;
+        const focusedCarScore = scores.find(
+            score => score.generation === currentGeneration &&
+                score.carNumber === focusedCar?.carNumber
+        );
+
+        // Get scores to display
+        let displayScores;
+        if (focusedCarScore) {
+            const focusedCarPosition = scores.indexOf(focusedCarScore);
+            if (focusedCarPosition < 10) {
+                // If focused car is in top 10, show top 10
+                displayScores = [...scores].slice(0, 10);
+            } else {
+                // If focused car is beyond top 10, show:
+                // - Top 3
+                // - Two positions before focused car
+                // - Focused car
+                // - Two positions after focused car (if they exist)
+                displayScores = [
+                    ...scores.slice(0, 3), // Top 3
+                    ...(focusedCarPosition > 3 ? ['...'] : []), // Ellipsis if there's a gap
+                    ...scores.slice(
+                        Math.max(3, focusedCarPosition - 1),
+                        Math.min(focusedCarPosition + 3, scores.length)
+                    )
+                ];
+            }
+        } else {
+            // No focused car, just show top 10
+            displayScores = [...scores].slice(0, 10);
+        }
+
+        // Only update the content, visibility is controlled by updateForCar
+        this.elements.leaderboard.innerHTML = `
+            <h2 style="margin: 0 0 10px 0; font-size: 18px;">Leaderboard</h2>
+            ${displayScores.map((score) => {
+            if (score === '...') {
+                return `<div style="text-align: center; margin: 5px 0;">...</div>`;
+            }
+            const isFocusedCar = focusedCarScore &&
+                score.generation === focusedCarScore.generation &&
+                score.carNumber === focusedCarScore.carNumber;
+            const position = scores.indexOf(score) + 1;
+            return `
+                    <div style="margin: 5px 0; padding: 5px; 
+                        background-color: ${score.generation === currentGeneration ? 'rgba(255,140,0,0.3)' : 'rgba(255,255,255,0.1)'};
+                        border-radius: 4px;">
+                        <div style="
+                            font-weight: bold;
+                            color: ${isFocusedCar ? '#00ff00' : 'white'};
+                        ">#${position}. Gen ${score.generation} Car ${score.carNumber}</div>
+                        <div style="color: ${isFocusedCar ? '#00ff00' : 'white'};">
+                            Time: ${score.time.toFixed(2)}s
+                        </div>
+                    </div>
+                `;
+        }).join('')}
+        `;
     }
 } 

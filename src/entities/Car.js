@@ -26,7 +26,7 @@ class Car {
     static MAX_STEER = Math.PI / 4;
 
     static RAY_LENGTH = 30;
-    static RAY_COUNT = 9;
+    static RAY_COUNT = 5;
     static RAY_SPREAD = 120;
     static RAY_DEVIATION = 30;
     static RAY_COLOR = [255, 165, 0, 128];
@@ -35,10 +35,10 @@ class Car {
 
     // Define available car colors
     static COLORS = {
-        RED: { r: 255, g: 0, b: 0 },      // Pure red
-        BLUE: { r: 0, g: 100, b: 255 },   // Pure blue
-        GREEN: { r: 0, g: 255, b: 0 },    // Pure green
-        ORANGE: { r: 255, g: 165, b: 0 }  // Pure orange
+        RED: { r: 255, g: 0, b: 0 },      // Eliminated
+        BLUE: { r: 0, g: 100, b: 255 },   // AI running
+        GREEN: { r: 0, g: 255, b: 0 },    // Selected
+        GOLD: { r: 255, g: 215, b: 0 }    // Finished race
     };
 
     constructor(gameWorld, menu = null, brain = null, color = null, debug = false) {
@@ -48,26 +48,32 @@ class Car {
         this.menu = menu;
         this.brain = brain;
         this.brain.setCar(this);
+        this.reverseEnabled = false;
+        this.isEliminated = false;
+        this.isSelected = false;
+        this.isFocused = false;
+        this.carNumber = 0;
+        this.display = Display.getInstance();
 
-        // Set car color - if none provided, pick random from COLORS
-        if (color) {
-            this.carColor = color;
-        } else {
-            const colors = Object.values(Car.COLORS);
-            this.carColor = colors[Math.floor(Math.random() * colors.length)];
-        }
+        // Set initial color to blue for AI
+        this.carColor = Car.COLORS.BLUE;
+        this.updateCarImage();
 
         // Load images
         this.loadImages();
 
         // Timer variables
+        this.isCountingDown = true;
+        this.raceFinished = false;
         this.startTime = null;
         this.raceTime = 0;
+        this.finishTime = null;  // Store finish time separately
+
+        // Checkpoint tracking
         this.checkpointTimes = [];
         this.hitCheckpoints = new Set();
         this.totalCheckpoints = 0;
         this.allCheckpointsHit = false;
-        this.raceFinished = false;
 
         // Wall collision counter
         this.wallCollisions = 0;
@@ -83,13 +89,78 @@ class Car {
         this.scorePosition = null;
         this.scoreDisplayStartTime = null;
 
-        this.display = new Display(() => this.restartRace());
-        this.display.positionElements();
-
         this.setupPhysics();
+    }
 
-        this.isCountingDown = true;
-        this.display.hideAllMetrics();
+    updateCarImage() {
+        if (this.carBodyImage) {
+            this.carBodyImage.loadPixels();
+            for (let i = 0; i < this.carBodyImage.pixels.length; i += 4) {
+                const r = this.carBodyImage.pixels[i];
+                const g = this.carBodyImage.pixels[i + 1];
+                const b = this.carBodyImage.pixels[i + 2];
+
+                // Check if pixel is part of the car body (not transparent)
+                if (g > 200 && r < 50 && b == 0) {
+                    this.carBodyImage.pixels[i] = this.carColor.r;
+                    this.carBodyImage.pixels[i + 1] = this.carColor.g;
+                    this.carBodyImage.pixels[i + 2] = this.carColor.b;
+                }
+            }
+            this.carBodyImage.updatePixels();
+        }
+    }
+
+    setSelected(selected) {
+        this.isSelected = selected;
+        this.updateCarColor();
+    }
+
+    updateCarColor() {
+        // Gold has highest priority for finished cars
+        if (this.raceFinished) {
+            this.carColor = Car.COLORS.GOLD;
+        } else if (this.isSelected) {
+            this.carColor = Car.COLORS.GREEN;
+        } else if (this.isEliminated) {
+            this.carColor = Car.COLORS.RED;
+        } else {
+            this.carColor = Car.COLORS.BLUE;
+        }
+        this.loadImages();
+    }
+
+    setFocused(focused) {
+        this.isFocused = focused;
+        // Being focused doesn't change the car's color
+    }
+
+    handleWallCollision() {
+        const speed = Math.sqrt(
+            this.chassisBody.velocity[0] * this.chassisBody.velocity[0] +
+            this.chassisBody.velocity[1] * this.chassisBody.velocity[1]
+        );
+
+        if (speed > 0.1) {
+            this.wallCollisions++; // Increment wall collision counter
+            this.chassisBody.velocity[0] *= Car.COLLISION_DAMPING;
+            this.chassisBody.velocity[1] *= Car.COLLISION_DAMPING;
+            this.chassisBody.angularVelocity *= Car.COLLISION_DAMPING;
+            this.backWheel.engineForce = 0;
+
+            // Only eliminate and change color if not finished
+            if (!this.raceFinished) {
+                this.isEliminated = true;
+                this.backWheel.engineForce = 0;
+                this.frontWheel.steerValue = 0;
+
+                // Change color to red when eliminated, unless it's selected or finished
+                if (!this.isSelected) {
+                    this.carColor = Car.COLORS.RED;
+                    this.loadImages();
+                }
+            }
+        }
     }
 
     loadImages() {
@@ -192,9 +263,11 @@ class Car {
 
     handleCheckpointCollision(checkpointIndex) {
         if (!this.hitCheckpoints.has(checkpointIndex)) {
+            // Store the checkpoint and its time
             this.hitCheckpoints.add(checkpointIndex);
-            this.checkpointTimes.push(this.raceTime);
+            this.checkpointTimes[checkpointIndex] = this.raceTime;
 
+            // Check if all checkpoints are hit
             if (this.hitCheckpoints.size === this.totalCheckpoints) {
                 this.allCheckpointsHit = true;
             }
@@ -204,43 +277,21 @@ class Car {
     handleFinishCollision() {
         if (this.allCheckpointsHit && !this.raceFinished) {
             this.raceFinished = true;
+            this.finishTime = this.raceTime;  // Store finish time
+
+            // Stop the car
             this.backWheel.engineForce = 0;
             this.frontWheel.steerValue = 0;
+            this.backWheel.setBrakeForce(0);
 
-            // Add score to score manager with track ID
+            // Update score
             const trackId = this.gameWorld.track.getCurrentTrackId();
-            this.scorePosition = this.scoreManager.addScore(trackId, this.raceTime, this.checkpointTimes);
+            this.scorePosition = this.scoreManager.addScore(trackId, this.finishTime, this.checkpointTimes);
             this.scoreDisplayStartTime = Date.now();
 
-            // Update menu scores if menu exists
-            if (this.menu) {
-                this.menu.updateScores();
-            }
-
-            // Show finish overlay
-            const bestScore = this.scoreManager.getBestScore(trackId);
-            this.display.showFinish({
-                time: this.raceTime,
-                position: this.scorePosition,
-                wallHits: this.wallCollisions,
-                bestTime: bestScore ? bestScore.totalTime : null,
-                checkpointTimes: this.checkpointTimes,
-                trackName: this.gameWorld.track.getCurrentTrackName()
-            });
-        }
-    }
-    handleWallCollision() {
-        const speed = Math.sqrt(
-            this.chassisBody.velocity[0] * this.chassisBody.velocity[0] +
-            this.chassisBody.velocity[1] * this.chassisBody.velocity[1]
-        );
-
-        if (speed > 0.1) {
-            this.wallCollisions++; // Increment wall collision counter
-            this.chassisBody.velocity[0] *= Car.COLLISION_DAMPING;
-            this.chassisBody.velocity[1] *= Car.COLLISION_DAMPING;
-            this.chassisBody.angularVelocity *= Car.COLLISION_DAMPING;
-            this.backWheel.engineForce = 0;
+            // Force color update and reload images immediately
+            this.carColor = Car.COLORS.GOLD;
+            this.loadImages();
         }
     }
 
@@ -252,11 +303,16 @@ class Car {
 
     backward(value = 1) {
         if (this.isCountingDown || this.raceFinished) return;
+
+        // Always apply brake force when moving forward
         if (this.backWheel.getSpeed() > 0.1) {
             this.backWheel.setBrakeForce(Car.BRAKE_FORCE * value);
         } else {
             this.backWheel.setBrakeForce(0);
-            this.backWheel.engineForce = Car.REVERSE_ENGINE_FORCE * value;
+            // Only apply reverse force if reverse is enabled
+            if (this.reverseEnabled) {
+                this.backWheel.engineForce = Car.REVERSE_ENGINE_FORCE * value;
+            }
         }
     }
 
@@ -292,6 +348,17 @@ class Car {
     }
 
     update() {
+        // Don't update eliminated cars
+        if (this.isEliminated) return;
+
+        // Update race time if race is active
+        if (this.startTime && !this.raceFinished) {
+            this.raceTime = (Date.now() - this.startTime) / 1000;
+        }
+
+        // Always update rays for neural network input
+        this.updateRays();
+
         this.brain.update();
         this.brain.drive();
     }
@@ -302,18 +369,21 @@ class Car {
     }
 
     draw() {
-        this.updateRays();
-        if (this.debug) {
+        // Draw rays only for focused car
+        if (this.isFocused) {
             this.drawRays();
         }
+
+        // Always draw the car
         this.drawCar();
-        this.updateDisplay();
     }
 
     drawCar() {
         push();
         translate(this.chassisBody.position[0], this.chassisBody.position[1]);
         rotate(this.chassisBody.angle + PI);
+
+        // Draw car body
         imageMode(CENTER);
         image(this.carBodyImage, 0, 0, this.boxShape.width, this.boxShape.height);
 
@@ -325,6 +395,18 @@ class Car {
             image(this.carWheelImage, 0, 0, Car.WHEEL_WIDTH, Car.WHEEL_HEIGHT);
             pop();
         }
+
+        // Draw car number
+        push();
+        rotate(-PI); // Rotate back to make text upright
+        textSize(0.3);
+        textAlign(CENTER, CENTER);
+        fill(255);
+        stroke(0);
+        strokeWeight(0.05);
+        text(this.carNumber, 0, 0);
+        pop();
+
         pop();
     }
 
@@ -456,10 +538,14 @@ class Car {
     startRace() {
         this.isCountingDown = false;
         this.startTime = Date.now();
-        this.display.showAllMetrics();
+        this.raceTime = 0;
     }
 
     restartRace() {
+        // Reset elimination state
+        this.isEliminated = false;
+        this.raceFinished = false;
+
         // Reset car position and angle
         this.chassisBody.position = [0, 0];
         this.chassisBody.angle = -90 * Math.PI / 180;
@@ -477,16 +563,12 @@ class Car {
         this.checkpointTimes = [];
         this.hitCheckpoints = new Set();
         this.allCheckpointsHit = false;
-        this.raceFinished = false;
         this.wallCollisions = 0;
 
         // Reset countdown state
         this.isCountingDown = true;
-        this.display.hideAllMetrics();
 
-        // Start new countdown
-        this.display.startCountdown(() => {
-            this.startRace();
-        });
+        // Reset color
+        this.updateCarColor();
     }
 }
