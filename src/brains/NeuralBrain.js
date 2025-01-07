@@ -136,13 +136,15 @@ class NeuralBrain extends Brain {
         return new NeuralBrain(clonedWeights);
     }
 
-    mutate() {
-        // Mutate weights with varying magnitudes
+    mutate(mutationStrength = 0.3) {
+        // Only mutate some weights based on mutation strength
         const mutateWeight = (weight) => {
-            // Always mutate, but with larger magnitudes
-            const magnitude = Math.random() * 0.8; // 0 to 0.8 instead of 0.2
-            const change = (Math.random() - 0.5) * 1.6; // -0.8 to 0.8 instead of -0.2 to 0.2
-            return weight + change * magnitude;
+            if (Math.random() < mutationStrength) {
+                const magnitude = Math.random() * 0.8; // 0 to 0.8 instead of 0.2
+                const change = (Math.random() - 0.5) * 1.6; // -0.8 to 0.8 instead of -0.2 to 0.2
+                return weight + change * magnitude;
+            }
+            return weight;
         };
 
         // Mutate hidden layer weights

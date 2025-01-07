@@ -5,6 +5,22 @@ let geneticManager;
 let isPaused = false;
 
 async function startGame(trackId = 'roundabout', shouldCreateNew = true) {
+    // Save the track ID as last used track
+    localStorage.setItem('lastUsedTrack', trackId);
+
+    // Clear all physics objects from world
+    const world = gameWorld.getPhysicsWorld();
+
+    // Remove all constraints first
+    while (world.constraints.length > 0) {
+        world.removeConstraint(world.constraints[0]);
+    }
+
+    // Remove all bodies
+    while (world.bodies.length > 0) {
+        world.removeBody(world.bodies[0]);
+    }
+
     if (shouldCreateNew) {
         // Initialize track
         const track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
@@ -15,7 +31,9 @@ async function startGame(trackId = 'roundabout', shouldCreateNew = true) {
         geneticManager = new GeneticManager(gameWorld);
     } else {
         // Reuse existing game instance
-        gameWorld.getTrack().setup(trackId);
+        const track = new Track(gameWorld.getPhysicsWorld(), DEBUG);
+        track.setup(trackId);
+        gameWorld.setTrack(track);
         geneticManager.initializePopulation();
     }
 
@@ -35,8 +53,11 @@ function setup() {
     // Load game world assets
     gameWorld.loadAssets();
 
-    // Start game with default track
-    startGame('roundabout', true);
+    // Get last used track or default to 'roundabout'
+    const lastUsedTrack = localStorage.getItem('lastUsedTrack') || 'roundabout';
+
+    // Start game with last used track
+    startGame(lastUsedTrack, true);
 }
 
 function draw() {
@@ -110,6 +131,25 @@ function keyPressed() {
     } else if (key === 'b' || key === 'B') {
         // B - focus best car
         geneticManager.focusBestCar();
+    } else if (key === 't' || key === 'T') {
+        // T - change track
+        const tracks = Track.TRACKS.map(track => track.id);
+        const currentTrack = gameWorld.getTrack().getCurrentTrackId();
+        const currentIndex = tracks.indexOf(currentTrack);
+        const nextIndex = (currentIndex + 1) % tracks.length;
+        startGame(tracks[nextIndex], false);
+    } else if (key === 'l' || key === 'L') {
+        // L - decrease mutation strength
+        geneticManager.decreaseMutationStrength();
+        // Update display with new mutation strength
+        const currentStrength = geneticManager.cars[0]?.brain?.getMutationStrength() || 0.3;
+        Display.getInstance().updateMutationStrength(currentStrength);
+    } else if (key === 'o' || key === 'O') {
+        // O - increase mutation strength
+        geneticManager.increaseMutationStrength();
+        // Update display with new mutation strength
+        const currentStrength = geneticManager.cars[0]?.brain?.getMutationStrength() || 0.3;
+        Display.getInstance().updateMutationStrength(currentStrength);
     } else {
         // Handle numpad keys for quick car selection (1-9 for cars 1-9, 0 for car 10)
         const numKey = parseInt(key);

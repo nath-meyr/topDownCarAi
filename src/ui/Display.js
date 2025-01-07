@@ -19,13 +19,14 @@ class Display {
             time: this.createMetricElement('time'),
             checkpoints: this.createMetricElement('checkpoints'),
             focusedCar: this.createMetricElement('focusedCar'),
-            selectedCars: this.createMetricElement('selectedCars'),
+            selectedCar: this.createMetricElement('selectedCar'),
             generation: this.createMetricElement('generation'),
             controls: this.createMetricElement('controls'),
             finish: this.createFinishOverlay(),
             countdown: this.createCountdownElement(),
             pause: this.createPauseOverlay(),
-            leaderboard: this.createLeaderboard()
+            leaderboard: this.createLeaderboard(),
+            mutationStrength: this.createMetricElement('mutationStrength')
         };
         this.focusedCar = null;
 
@@ -168,9 +169,13 @@ class Display {
         this.elements.focusedCar.style.top = '120px';
         this.elements.focusedCar.style.left = '20px';
 
-        // Position selected cars display (top left, below focused car)
-        this.elements.selectedCars.style.top = '170px';
-        this.elements.selectedCars.style.left = '20px';
+        // Position selected car display (top left, below focused car)
+        this.elements.selectedCar.style.top = '170px';
+        this.elements.selectedCar.style.left = '20px';
+
+        // Position mutation strength display (top left, below selected car)
+        this.elements.mutationStrength.style.top = '220px';
+        this.elements.mutationStrength.style.left = '20px';
 
         // Position generation counter (bottom left)
         this.elements.generation.style.bottom = '20px';
@@ -181,13 +186,16 @@ class Display {
         this.elements.controls.style.right = '20px';
         this.elements.controls.innerHTML = 'Controls:<br>' +
             'SPACE - Cycle Focus<br>' +
-            'ENTER - Select Car<br>' +
-            'E - Evolve Selected Cars<br>' +
+            'ENTER - Select/Deselect Car<br>' +
+            'E - Evolve Selected Car<br>' +
             'R - Restart Generation<br>' +
             'X - Reset Evolution<br>' +
             'P - Pause/Resume<br>' +
+            'O - Increase Mutation Strength<br>' +
+            'L - Decrease Mutation Strength<br>' +
             'Z - Undo Last Evolution<br>' +
             'B - Focus Best Car<br>' +
+            'T - Change Track<br>' +
             '1-9,0 - Focus Car 1-10';
     }
 
@@ -196,9 +204,10 @@ class Display {
         this.elements.time.style.display = 'block';
         this.elements.checkpoints.style.display = 'block';
         this.elements.focusedCar.style.display = 'block';
-        this.elements.selectedCars.style.display = 'block';
+        this.elements.selectedCar.style.display = 'block';
         this.elements.generation.style.display = 'block';
         this.elements.controls.style.display = 'block';
+        this.elements.mutationStrength.style.display = 'block';
     }
 
     hideAllMetrics() {
@@ -206,10 +215,11 @@ class Display {
         this.elements.time.style.display = 'none';
         this.elements.checkpoints.style.display = 'none';
         this.elements.focusedCar.style.display = 'none';
-        this.elements.selectedCars.style.display = 'none';
+        this.elements.selectedCar.style.display = 'none';
         this.elements.generation.style.display = 'none';
         this.elements.controls.style.display = 'none';
         this.elements.finish.style.display = 'none';
+        this.elements.mutationStrength.style.display = 'none';
     }
 
     updateForCar(car, raceTime = 0) {
@@ -302,12 +312,11 @@ class Display {
         this.elements.generation.textContent = `Generation: ${generation}`;
     }
 
-    updateSelectedCars(selectedCars) {
-        if (selectedCars.length === 0) {
-            this.elements.selectedCars.textContent = 'Selected Cars: none';
+    updateSelectedCars(selectedCar) {
+        if (!selectedCar) {
+            this.elements.selectedCar.textContent = 'Selected Car: none';
         } else {
-            const carNumbers = selectedCars.map(car => car.carNumber).sort((a, b) => a - b);
-            this.elements.selectedCars.textContent = `Selected Cars: #${carNumbers.join(', #')}`;
+            this.elements.selectedCar.textContent = `Selected Car: #${selectedCar.carNumber}`;
         }
     }
 
@@ -380,5 +389,9 @@ class Display {
                 `;
         }).join('')}
         `;
+    }
+
+    updateMutationStrength(strength) {
+        this.elements.mutationStrength.textContent = `Mutation Strength: ${(strength * 100).toFixed(1)}%`;
     }
 } 

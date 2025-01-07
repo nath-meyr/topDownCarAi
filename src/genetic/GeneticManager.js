@@ -2,10 +2,10 @@ class GeneticManager {
     constructor(gameWorld) {
         this.gameWorld = gameWorld;
         this.generation = 1;
-        this.populationSize = 10;
+        this.populationSize = 20;
         this.cars = [];
         this.bestBrains = [];
-        this.selectedCars = [];
+        this.selectedCar = null;
         this.focusedCarIndex = 0;
         this.display = Display.getInstance();
         this.display.showAllMetrics();
@@ -13,7 +13,9 @@ class GeneticManager {
         this.raceStartFrame = null;
         this.currentFrame = 0;
         this.brainHistory = [];
-        this.scores = [];
+        this.scores = {};
+        this.mutationRate = 0.1; // Chance of random brain vs mutated copy
+        this.mutationStrength = 0.3; // Default mutation strength (30%)
 
         // Try to load saved evolution data
         this.loadEvolution();
@@ -22,6 +24,9 @@ class GeneticManager {
         } else {
             this.restartFromHistory();
         }
+
+        // Initialize mutation strength display
+        this.display.updateMutationStrength(this.mutationStrength);
     }
 
     saveEvolution() {
@@ -33,7 +38,8 @@ class GeneticManager {
                     weights: brain.weights
                 }))
             })),
-            scores: this.scores
+            scores: this.scores,
+            mutationStrength: this.mutationStrength
         };
         localStorage.setItem('evolutionData', JSON.stringify(evolutionData));
     }
@@ -43,7 +49,8 @@ class GeneticManager {
         if (savedData) {
             const evolutionData = JSON.parse(savedData);
             this.generation = evolutionData.generation;
-            this.scores = evolutionData.scores || [];
+            this.scores = evolutionData.scores || {};
+            this.mutationStrength = evolutionData.mutationStrength || 0.3;
 
             // Reconstruct NeuralBrain objects from saved data
             this.brainHistory = evolutionData.brainHistory.map(entry => ({
@@ -55,7 +62,8 @@ class GeneticManager {
             }));
 
             // Update leaderboard display
-            this.display.updateLeaderboard(this.scores, this.generation);
+            const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+            this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
         }
     }
 
@@ -63,41 +71,44 @@ class GeneticManager {
         // Clear all evolution data
         this.generation = 1;
         this.brainHistory = [];
-        this.scores = [];
+        this.scores = {};
         localStorage.removeItem('evolutionData');
 
         // Reset cars with random brains
         this.initializePopulation();
 
         // Clear leaderboard
+        const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
         this.display.updateLeaderboard([], this.generation);
     }
 
     restartFromHistory() {
-        // Remove scores from current generation
-        this.scores = this.scores.filter(score => score.generation !== this.generation);
+        // Remove scores from current generation for current track
+        const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+        if (this.scores[currentTrackId]) {
+            this.scores[currentTrackId] = this.scores[currentTrackId].filter(
+                score => score.generation !== this.generation
+            );
+        }
 
         // Clear existing cars
         this.cars = [];
-        this.selectedCars = [];
+        this.selectedCar = null;
         this.focusedCarIndex = 0;
 
         // Get the last saved brains from history
         const lastGenBrains = this.brainHistory[this.brainHistory.length - 1].brains;
-        const halfPopulation = Math.floor(this.populationSize / 2);
 
-        // Create new population using saved brains
-        for (let i = 0; i < this.populationSize; i++) {
-            let brain;
-            if (lastGenBrains.length === 2) {
-                // If we have two brains, use first brain for first half, second brain for second half
-                const baseBrain = i < halfPopulation ? lastGenBrains[0] : lastGenBrains[1];
-                brain = baseBrain.clone();
-            } else {
-                // If we have one brain, use it for all cars
-                brain = lastGenBrains[0].clone();
-            }
-            brain.mutate();
+        // Create first car with exact copy of the best brain
+        const car1 = new Car(this.gameWorld, null, lastGenBrains[0].clone(), null, false);
+        car1.carNumber = 1;
+        car1.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
+        this.cars.push(car1);
+
+        // Create remaining cars with mutations
+        for (let i = 1; i < this.populationSize; i++) {
+            const brain = lastGenBrains[0].clone();
+            brain.mutate(this.mutationStrength);
 
             const car = new Car(this.gameWorld, null, brain, null, false);
             car.carNumber = i + 1;
@@ -112,8 +123,9 @@ class GeneticManager {
 
         // Update display
         this.display.updateForCar(firstCar);
-        this.display.updateSelectedCars(this.selectedCars);
-        this.display.updateLeaderboard(this.scores, this.generation); // Update leaderboard after removing scores
+        this.display.updateSelectedCars(this.selectedCar);
+        this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
+        this.display.updateMutationStrength(this.mutationStrength);
 
         // Save evolution data with updated scores
         this.saveEvolution();
@@ -123,32 +135,38 @@ class GeneticManager {
     }
 
     initializePopulation() {
-        // Remove scores from current generation
-        this.scores = this.scores.filter(score => score.generation !== this.generation);
+        // Remove scores from current generation for current track
+        const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+        if (this.scores[currentTrackId]) {
+            this.scores[currentTrackId] = this.scores[currentTrackId].filter(
+                score => score.generation !== this.generation
+            );
+        }
 
         // Clear existing cars
         this.cars = [];
-        this.selectedCars = [];
+        this.selectedCar = null;
         this.focusedCarIndex = 0;
 
-        // Create new population
+        // Create new population with random brains
         for (let i = 0; i < this.populationSize; i++) {
             const brain = new NeuralBrain();
             const car = new Car(this.gameWorld, null, brain, null, false);
-            car.carNumber = i + 1; // Assign number starting from 1
+            car.carNumber = i + 1;
             car.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
             this.cars.push(car);
         }
 
-        // Focus the first car (but don't select it)
+        // Focus the first car
         const firstCar = this.cars[0];
         firstCar.setFocused(true);
         this.focusedCarIndex = 0;
 
         // Show metrics for the focused car
         this.display.updateForCar(firstCar);
-        this.display.updateSelectedCars(this.selectedCars);
-        this.display.updateLeaderboard(this.scores, this.generation); // Update leaderboard after removing scores
+        this.display.updateSelectedCars(this.selectedCar);
+        this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
+        this.display.updateMutationStrength(this.mutationStrength);
 
         // Save evolution data with updated scores
         this.saveEvolution();
@@ -196,48 +214,50 @@ class GeneticManager {
     }
 
     evolve() {
-        // Check if we have at least one selected car
-        if (this.selectedCars.length === 0) {
-            console.warn('Need at least one car selected for evolution.');
+        // Check if we have a selected car
+        if (!this.selectedCar) {
+            console.warn('Need a car selected for evolution.');
             return;
         }
 
-        // Store brains of selected cars
-        this.bestBrains = this.selectedCars.map(car => car.brain);
+        // Store brain of the selected car
+        const bestBrain = this.selectedCar.brain;
 
-        // Add selected brains to history with generation number
+        // Add selected brain to history with generation number
         this.brainHistory.push({
             generation: this.generation,
-            brains: this.bestBrains.map(brain => brain.clone())
+            brains: [bestBrain.clone()]
         });
 
         // Save evolution data
         this.saveEvolution();
 
-        // Unselect all cars before clearing them
-        this.selectedCars.forEach(car => car.setSelected(false));
-        this.display.updateSelectedCars([]);  // Update display to show no selected cars
+        // Unselect car before clearing
+        if (this.selectedCar) {
+            this.selectedCar.setSelected(false);
+            this.display.updateSelectedCars(null);
+        }
 
         // Clear existing cars
         this.cars = [];
-        this.selectedCars = [];
+        this.selectedCar = null;
         this.focusedCarIndex = 0;
 
-        // Calculate half population for even split
-        const halfPopulation = Math.floor(this.populationSize / 2);
+        // Create first car with exact copy of the best brain
+        const car1 = new Car(this.gameWorld, null, bestBrain.clone(), null, false);
+        car1.carNumber = 1;
+        car1.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
+        this.cars.push(car1);
 
-        // Create new population
-        for (let i = 0; i < this.populationSize; i++) {
+        // Create remaining cars with mutations based on mutation rate
+        for (let i = 1; i < this.populationSize; i++) {
             let brain;
-            if (this.bestBrains.length === 2) {
-                // If we have two selected cars, use first brain for first half, second brain for second half
-                const baseBrain = i < halfPopulation ? this.bestBrains[0] : this.bestBrains[1];
-                brain = baseBrain.clone();
+            if (Math.random() < this.mutationRate) {
+                brain = new NeuralBrain();
             } else {
-                // If we have one selected car, use it for all cars
-                brain = this.bestBrains[0].clone();
+                brain = bestBrain.clone();
+                brain.mutate(this.mutationStrength);
             }
-            brain.mutate();
 
             const car = new Car(this.gameWorld, null, brain, null, false);
             car.carNumber = i + 1;
@@ -250,9 +270,10 @@ class GeneticManager {
         firstCar.setFocused(true);
         this.focusedCarIndex = 0;
 
-        // Update display for the new focused car and clear selected cars
+        // Update display for the new focused car and clear selected car
         this.display.updateForCar(firstCar);
-        this.display.updateSelectedCars(this.selectedCars);
+        this.display.updateSelectedCars(null);
+        this.display.updateMutationStrength(this.mutationStrength);
 
         // Reset generation start time
         this.generationStartFrame = this.currentFrame;
@@ -270,7 +291,7 @@ class GeneticManager {
 
         // After 30 seconds, wait for 2 selected cars
         if (timeElapsed > 30) {
-            if (this.selectedCars.length === 2) {
+            if (this.selectedCar) {
                 return true;
             }
             // If all cars are eliminated/finished and we don't have 2 selections, keep waiting
@@ -297,8 +318,15 @@ class GeneticManager {
 
             // Check if car just finished
             if (car.raceFinished && !car.scoreRecorded) {
+                const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+
+                // Initialize track scores if needed
+                if (!this.scores[currentTrackId]) {
+                    this.scores[currentTrackId] = [];
+                }
+
                 // Add score to leaderboard
-                this.scores.push({
+                this.scores[currentTrackId].push({
                     generation: this.generation,
                     carNumber: car.carNumber,
                     time: car.finishTime,
@@ -306,22 +334,22 @@ class GeneticManager {
                     brain: car.brain.weights // Save the brain weights
                 });
 
-                // Sort scores by time
-                this.scores.sort((a, b) => a.time - b.time);
+                // Sort scores by time for current track
+                this.scores[currentTrackId].sort((a, b) => a.time - b.time);
 
                 // Mark score as recorded
                 car.scoreRecorded = true;
 
-                // Update leaderboard display
-                this.display.updateLeaderboard(this.scores, this.generation);
+                // Update leaderboard display with current track's scores
+                this.display.updateLeaderboard(this.scores[currentTrackId], this.generation);
 
                 // Save evolution data with new score
                 this.saveEvolution();
 
                 // If this is the focused car or it's the first car to finish, update display
-                if (car.isFocused || this.scores.length === 1) {
+                if (car.isFocused || this.scores[currentTrackId].length === 1) {
                     // If it's the first car to finish and not focused, focus it
-                    if (this.scores.length === 1 && !car.isFocused) {
+                    if (this.scores[currentTrackId].length === 1 && !car.isFocused) {
                         // Unfocus current car
                         if (this.focusedCarIndex !== null) {
                             this.cars[this.focusedCarIndex].setFocused(false);
@@ -352,24 +380,21 @@ class GeneticManager {
         const focusedCar = this.cars[this.focusedCarIndex];
 
         // If car is already selected, deselect it
-        const index = this.selectedCars.indexOf(focusedCar);
-        if (index !== -1) {
-            this.selectedCars.splice(index, 1);
+        if (this.selectedCar === focusedCar) {
+            this.selectedCar = null;
             focusedCar.setSelected(false);
         } else {
-            // If we already have 2 selected cars, deselect the first one
-            if (this.selectedCars.length >= 2) {
-                const removedCar = this.selectedCars.shift(); // Remove first car
-                removedCar.setSelected(false);
+            // Deselect previous car if any
+            if (this.selectedCar) {
+                this.selectedCar.setSelected(false);
             }
-
-            // Add the car to selected cars
-            this.selectedCars.push(focusedCar);
+            // Select the new car
+            this.selectedCar = focusedCar;
             focusedCar.setSelected(true);
         }
 
-        // Update the selected cars display
-        this.display.updateSelectedCars(this.selectedCars);
+        // Update the selected car display
+        this.display.updateSelectedCars(this.selectedCar);
     }
 
     cycleFocus() {
@@ -390,59 +415,63 @@ class GeneticManager {
 
         // Update leaderboard if car has finished
         if (newFocusedCar.raceFinished) {
-            this.display.updateLeaderboard(this.scores, this.generation);
+            const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+            this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
         }
     }
 
     restartGeneration() {
-        // Remove scores from current generation
-        this.scores = this.scores.filter(score => score.generation !== this.generation);
-
-        // Store selected brains before clearing
-        const selectedBrains = this.selectedCars.map(car => car.brain);
-
-        // Add current selected brains to history if any
-        if (selectedBrains.length > 0) {
-            this.brainHistory.push({
-                generation: this.generation,
-                brains: selectedBrains.map(brain => brain.clone())
-            });
+        // Remove scores from current generation for current track
+        const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+        if (this.scores[currentTrackId]) {
+            this.scores[currentTrackId] = this.scores[currentTrackId].filter(
+                score => score.generation !== this.generation
+            );
         }
+
+        // Store selected brain before clearing
+        const selectedBrain = this.selectedCar ? this.selectedCar.brain.clone() : null;
 
         // Clear existing cars
         this.cars = [];
-        this.selectedCars = [];
+        this.selectedCar = null;
         this.focusedCarIndex = 0;
 
-        // Calculate half population for even split
-        const halfPopulation = Math.floor(this.populationSize / 2);
-
         // Create new population
-        for (let i = 0; i < this.populationSize; i++) {
-            let brain;
-            if (selectedBrains.length > 0 || this.brainHistory.length > 0) {
-                // Use either current selected brains or last entry from history
-                const sourceBrains = selectedBrains.length > 0 ? selectedBrains :
-                    this.brainHistory[this.brainHistory.length - 1].brains;
+        if (selectedBrain || this.brainHistory.length > 0) {
+            // Use either current selected brain or last entry from history
+            const brain = selectedBrain || this.brainHistory[this.brainHistory.length - 1].brains[0];
 
-                if (sourceBrains.length === 2) {
-                    // If we have two brains, use first brain for first half, second brain for second half
-                    const baseBrain = i < halfPopulation ? sourceBrains[0] : sourceBrains[1];
-                    brain = baseBrain.clone();
+            // Create first car with exact copy
+            const car1 = new Car(this.gameWorld, null, brain.clone(), null, false);
+            car1.carNumber = 1;
+            car1.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
+            this.cars.push(car1);
+
+            // Create remaining cars with mutations based on mutation rate
+            for (let i = 1; i < this.populationSize; i++) {
+                let newBrain;
+                if (Math.random() < this.mutationRate) {
+                    newBrain = new NeuralBrain();
                 } else {
-                    // If we have one brain, use it for all cars
-                    brain = sourceBrains[0].clone();
+                    newBrain = brain.clone();
+                    newBrain.mutate(this.mutationStrength);
                 }
-                brain.mutate();
-            } else {
-                // If no history or selected cars, create completely random brains
-                brain = new NeuralBrain();
-            }
 
-            const car = new Car(this.gameWorld, null, brain, null, false);
-            car.carNumber = i + 1;
-            car.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
-            this.cars.push(car);
+                const car = new Car(this.gameWorld, null, newBrain, null, false);
+                car.carNumber = i + 1;
+                car.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
+                this.cars.push(car);
+            }
+        } else {
+            // If no history or selected car, create completely random brains
+            for (let i = 0; i < this.populationSize; i++) {
+                const brain = new NeuralBrain();
+                const car = new Car(this.gameWorld, null, brain, null, false);
+                car.carNumber = i + 1;
+                car.setTotalCheckpoints(this.gameWorld.getTrack().getTotalCheckpoints());
+                this.cars.push(car);
+            }
         }
 
         // Focus the first car
@@ -452,8 +481,9 @@ class GeneticManager {
 
         // Update display
         this.display.updateForCar(firstCar);
-        this.display.updateSelectedCars(this.selectedCars);
-        this.display.updateLeaderboard(this.scores, this.generation); // Update leaderboard after removing scores
+        this.display.updateSelectedCars(null);
+        this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
+        this.display.updateMutationStrength(this.mutationStrength);
 
         // Save evolution data with updated scores
         this.saveEvolution();
@@ -499,7 +529,8 @@ class GeneticManager {
 
         // Update leaderboard if car has finished
         if (car.raceFinished) {
-            this.display.updateLeaderboard(this.scores, this.generation);
+            const currentTrackId = this.gameWorld.getTrack().getCurrentTrackId();
+            this.display.updateLeaderboard(this.scores[currentTrackId] || [], this.generation);
         }
     }
 
@@ -510,39 +541,81 @@ class GeneticManager {
             .sort((a, b) => a.finishTime - b.finishTime);
 
         if (finishedCars.length > 0) {
-            // If there are finished cars, use finish time to determine best
-            const currentFocusedIndex = finishedCars.findIndex(car => car.isFocused);
-            const nextIndex = currentFocusedIndex === -1 ? 0 : (currentFocusedIndex + 1) % finishedCars.length;
-            const carToFocus = finishedCars[nextIndex];
-            const mainArrayIndex = this.cars.findIndex(car => car === carToFocus);
+            // If there are finished cars, focus the one with best finish time
+            const bestCar = finishedCars[0];
+            const mainArrayIndex = this.cars.findIndex(car => car === bestCar);
             if (mainArrayIndex !== -1) {
                 this.focusCarByIndex(mainArrayIndex);
             }
         } else {
-            // If no cars have finished, use checkpoints and time
-            const activeCars = this.cars
-                .filter(car => !car.isEliminated)
+            // If no cars have finished, sort by checkpoints and time
+            const unfinishedCars = this.cars
+                .filter(car => !car.raceFinished)
+                // First sort by last checkpoint time (bigger first)
                 .sort((a, b) => {
-                    // First compare by number of checkpoints
-                    const checkpointDiff = b.hitCheckpoints.size - a.hitCheckpoints.size;
-                    if (checkpointDiff !== 0) return checkpointDiff;
-                    // If same number of checkpoints, compare by time
-                    return a.raceTime - b.raceTime;
+                    const aCheckpointTimes = Object.keys(a.checkpointTimes).length;
+                    const bCheckpointTimes = Object.keys(b.checkpointTimes).length;
+                    const aLastTime = aCheckpointTimes > 0 ? a.checkpointTimes[aCheckpointTimes - 1] : -Infinity;
+                    const bLastTime = bCheckpointTimes > 0 ? b.checkpointTimes[bCheckpointTimes - 1] : -Infinity;
+                    return bLastTime - aLastTime;
+                })
+                // Then sort by number of checkpoint times (bigger first)
+                .sort((a, b) => {
+                    const aCheckpointTimes = Object.keys(a.checkpointTimes).length;
+                    const bCheckpointTimes = Object.keys(b.checkpointTimes).length;
+                    return bCheckpointTimes - aCheckpointTimes;
                 });
 
-            if (activeCars.length === 0) {
-                console.log('No active cars found');
-                return;
-            }
-
-            // Find current focused car in active cars
-            const currentFocusedIndex = activeCars.findIndex(car => car.isFocused);
-            const nextIndex = currentFocusedIndex === -1 ? 0 : (currentFocusedIndex + 1) % activeCars.length;
-            const carToFocus = activeCars[nextIndex];
-            const mainArrayIndex = this.cars.findIndex(car => car === carToFocus);
-            if (mainArrayIndex !== -1) {
-                this.focusCarByIndex(mainArrayIndex);
+            if (unfinishedCars.length > 0) {
+                // Focus the car with most checkpoints / best time
+                const bestCar = unfinishedCars[0];
+                const mainArrayIndex = this.cars.findIndex(car => car === bestCar);
+                if (mainArrayIndex !== -1) {
+                    this.focusCarByIndex(mainArrayIndex);
+                }
             }
         }
     }
-} 
+
+    // Add method to adjust mutation rate
+    setMutationRate(rate) {
+        // Clamp rate between 0 and 1
+        this.mutationRate = Math.max(0, Math.min(1, rate));
+        console.log(`Mutation rate set to ${(this.mutationRate * 100).toFixed(1)}%`);
+    }
+
+    // Add method to decrease mutation rate
+    decreaseMutationRate() {
+        const newRate = Math.max(0, this.mutationRate - 0.1);
+        this.setMutationRate(newRate);
+    }
+
+    // Add method to increase mutation rate
+    increaseMutationRate() {
+        const newRate = Math.min(1, this.mutationRate + 0.1);
+        this.setMutationRate(newRate);
+    }
+
+    // Add method to adjust mutation strength
+    setMutationStrength(strength) {
+        // Clamp and update the global mutation strength
+        this.mutationStrength = Math.max(0, Math.min(1, strength));
+        console.log(`Mutation strength set to ${(this.mutationStrength * 100).toFixed(1)}%`);
+        // Update display
+        this.display.updateMutationStrength(this.mutationStrength);
+        // Save the updated mutation strength
+        this.saveEvolution();
+    }
+
+    // Add method to decrease mutation strength
+    decreaseMutationStrength() {
+        const newStrength = Math.max(0, this.mutationStrength - 0.1);
+        this.setMutationStrength(newStrength);
+    }
+
+    // Add method to increase mutation strength
+    increaseMutationStrength() {
+        const newStrength = Math.min(1, this.mutationStrength + 0.1);
+        this.setMutationStrength(newStrength);
+    }
+}

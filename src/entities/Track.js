@@ -28,6 +28,7 @@ class Track {
         {
             id: 'roundabout',
             name: 'Roundabout',
+            type: 'loop',
             definition: [
                 { type: 's', length: 10 },
                 { type: 'c', radius: 6, direction: 'l' },
@@ -42,6 +43,7 @@ class Track {
         {
             id: 'complex',
             name: 'Complex Circuit',
+            type: 'loop',
             definition: [
                 { type: 's', length: 40 },
                 { type: 'c', radius: 6, direction: 'l' },
@@ -70,10 +72,31 @@ class Track {
                 { type: 's', length: 30 },
                 { type: 'c', radius: 6, direction: 'l' },
             ]
+        },
+        {
+            id: 'le s',
+            name: 'le s',
+            type: 'race',
+            definition: [
+                { type: 's', length: 10 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 15 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 20 },
+                { type: 'c', radius: 6, direction: 'l' },
+                { type: 's', length: 15 },
+                { type: 'c', radius: 8, direction: 'r' },
+                { type: 's', length: 30 },
+                { type: 'c', radius: 6, direction: 'r' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 4, direction: 'l' },
+                { type: 's', length: 10 },
+                { type: 'c', radius: 4, direction: 'r' },
+                { type: 's', length: 20 }
+            ]
         }
     ];
 
-    type = 'loop';
     track = [];
     checkpoints = [];
     startLine = null;
@@ -89,7 +112,7 @@ class Track {
         this.debug = debug;
     }
 
-    setup(trackId = 'figure8') {
+    setup(trackId = 'roundabout') {
         // Find the track by ID
         this.currentTrack = Track.TRACKS.find(track => track.id === trackId);
         if (!this.currentTrack) {
@@ -105,6 +128,48 @@ class Track {
         let currentPosition = createVector(0, 0);
         let currentAngle = 0;
         let startPosition = currentPosition.copy();
+
+        // Create half-round wall for race-type tracks
+        if (this.currentTrack.type === 'race') {
+            const firstSegment = this.currentTrack.definition[0];
+            if (firstSegment.type === 'straight' || firstSegment.type === 's') {
+                const numSegments = 10;
+                const radius = Track.ROAD_WIDTH / 2;
+                const startAngle = 180;
+                const endAngle = 360;
+                const angleStep = (endAngle - startAngle) / numSegments;
+
+                // Create physics bodies for the wall
+                for (let i = 0; i <= numSegments; i++) {
+                    const angle = radians(startAngle + i * angleStep);
+                    const rotatedAngle = angle + radians(currentAngle);
+
+                    // Calculate inner and outer points
+                    const innerX = currentPosition.x + (radius - Track.WALL_THICKNESS * 0.25) * cos(rotatedAngle - Math.PI / 2);
+                    const innerY = currentPosition.y + (radius - Track.WALL_THICKNESS * 0.25) * sin(rotatedAngle - Math.PI / 2);
+                    const outerX = currentPosition.x + (radius + Track.WALL_THICKNESS * 0.25) * cos(rotatedAngle - Math.PI / 2);
+                    const outerY = currentPosition.y + (radius + Track.WALL_THICKNESS * 0.25) * sin(rotatedAngle - Math.PI / 2);
+
+                    const wallX = (innerX + outerX) / 2;
+                    const wallY = (innerY + outerY) / 2;
+
+                    const wall = new p2.Body({
+                        mass: 0,
+                        position: [wallX, wallY],
+                        angle: rotatedAngle
+                    });
+
+                    const shape = new p2.Box({
+                        width: 2 * Math.PI * radius / numSegments,
+                        height: Track.WALL_THICKNESS,
+                        collisionGroup: Track.COLLISION_GROUP.WALL,
+                        collisionMask: Track.COLLISION_GROUP.CAR
+                    });
+                    wall.addShape(shape);
+                    this.world.addBody(wall);
+                }
+            }
+        }
 
         // Use the track definition from the current track
         for (let segment of this.currentTrack.definition) {
@@ -129,12 +194,12 @@ class Track {
             this.createCheckpoint(currentPosition, currentAngle);
         }
 
-        if (this.type === 'loop') {
+        if (this.currentTrack.type === 'loop') {
             this.createLoopConnection(currentPosition, currentAngle, startPosition);
         }
 
         let endPosition = currentPosition.copy();
-        if (this.type === 'loop') {
+        if (this.currentTrack.type === 'loop') {
             endPosition = startPosition.copy();
         }
         // Create start/finish line
@@ -384,6 +449,33 @@ class Track {
         let roadSurfaceInstructions = [];
         let wallsInstructions = [];
 
+        // Add half-round wall drawing instructions for race-type tracks
+        if (this.currentTrack.type === 'race') {
+            const firstSegment = this.currentTrack.definition[0];
+            if (firstSegment.type === 'straight' || firstSegment.type === 's') {
+                const numSegments = 10;
+                const radius = Track.ROAD_WIDTH / 2;
+                const startAngle = 180;
+                const endAngle = 360;
+                const angleStep = (endAngle - startAngle) / numSegments;
+
+                // Add half-round wall to drawing instructions
+                wallsInstructions.push({
+                    type: 'curve',
+                    data: {
+                        centerX: currentPosition.x,
+                        centerY: currentPosition.y,
+                        startAngle: currentAngle + startAngle,
+                        steps: numSegments,
+                        angleStep: angleStep,
+                        directionMultiplier: 1,
+                        innerRadius: radius - Track.WALL_THICKNESS * 0.25,
+                        outerRadius: radius + Track.WALL_THICKNESS * 0.25
+                    }
+                });
+            }
+        }
+
         // Gather all drawing instructions
         for (let segment of this.currentTrack.definition) {
             if (segment.type === 'straight' || segment.type === 's') {
@@ -403,7 +495,7 @@ class Track {
             }
         }
 
-        if (this.type === 'loop') {
+        if (this.currentTrack.type === 'loop') {
             // Add loop connection to drawing instructions
             roadSurfaceInstructions.push({
                 type: 'straight',
@@ -414,7 +506,7 @@ class Track {
                 type: 'straight',
                 data: {
                     start: currentPosition,
-                    end: startPosition,
+                    end: currentPosition,
                     offsetX: (Track.ROAD_WIDTH / 2) * cos(radians(currentAngle) + Math.PI / 2),
                     offsetY: (Track.ROAD_WIDTH / 2) * sin(radians(currentAngle) + Math.PI / 2)
                 }
@@ -431,9 +523,9 @@ class Track {
 
         this.drawAllWalls(Track.WALL_COLOR, Track.WALL_WIDTH, wallsInstructions);
 
-        if (this.debug) {
-            this.drawAllRoadSurface(Track.DEBUG_COLOR, 0.05, roadSurfaceInstructions);
-        }
+        // if (this.debug) {
+        //     this.drawAllRoadSurface(Track.DEBUG_COLOR, 0.05, roadSurfaceInstructions);
+        // }
 
         drawingContext.setLineDash([1, 1])
         this.drawAllRoadSurface(Track.CENTER_LINE_COLOR, 0.05, roadSurfaceInstructions);
@@ -488,7 +580,9 @@ class Track {
     }
 
     createStartFinishLine(startPosition, endPosition, currentAngle) {
-        const perpendicularAngle = currentAngle + 90;
+        // For race-type tracks, we want the start/finish lines perpendicular to the track direction
+        // For loop tracks, we keep the existing behavior
+        const perpendicularAngle = this.currentTrack.type === 'race' ? currentAngle : currentAngle + 90;
         this.createLineBody(startPosition, perpendicularAngle, Track.START_GROUP);
         this.createLineBody(endPosition, perpendicularAngle, Track.FINISH_GROUP);
         this.startLine = { position: startPosition.copy(), angle: perpendicularAngle };
@@ -534,7 +628,6 @@ class Track {
             collisionMask: Track.COLLISION_GROUP.CAR
         });
         p2line.addShape(shape);
-
         this.world.addBody(p2line);
         return p2line;
     }
