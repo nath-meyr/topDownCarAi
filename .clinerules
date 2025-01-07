@@ -1,0 +1,116 @@
+# Cline Rules for P5.js Neural Network Racing Project
+
+## Project Structure
+This is a p5.js-based project implementing a neural network and genetic algorithm for car racing simulation. The project is organized into the following key directories:
+
+- src/brains/: Neural network and control implementations
+- src/entities/: Game objects like Car, Track, and World
+- src/genetic/: Genetic algorithm implementation
+- src/ui/: User interface components
+- assets/: Images and third-party libraries
+
+## Code Organization Rules
+
+1. Keep all source code in the src/ directory, organized by feature/domain
+2. Place all game entities in src/entities/
+3. Keep AI/ML related code in src/brains/ and src/genetic/
+4. Store UI components in src/ui/
+5. Place all assets (images, libraries) in the assets/ directory
+6. Maintain index.html in the root directory as the entry point
+
+## Coding Standards
+
+1. Use ES6+ JavaScript features and syntax
+2. Follow consistent naming conventions:
+   - Classes: PascalCase (e.g., NeuralBrain, GeneticManager)
+   - Methods/Functions: camelCase (e.g., updateFitness, calculateScore)
+   - Constants: UPPER_SNAKE_CASE
+   - Private properties/methods: prefix with underscore (_)
+
+3. File organization:
+   - One class per file
+   - File names should match class names
+   - Group related functionality in directories
+
+4. Code structure:
+   - Start files with necessary imports
+   - Document classes with clear purpose/responsibility
+   - Order methods: constructor, public methods, private methods
+   - Keep methods focused and single-purpose
+
+5. Documentation:
+   - Add JSDoc comments for classes and public methods
+   - Include parameter types and return values
+   - Document complex algorithms and key decisions
+   - Maintain README.md with setup and usage instructions
+
+## Best Practices
+
+1. Neural Network Implementation:
+   - Separate network architecture from training logic
+   - Document network topology and hyperparameters
+   - Include methods for saving/loading trained models
+
+2. Genetic Algorithm:
+   - Clear separation of fitness evaluation and evolution logic
+   - Document selection and mutation strategies
+   - Include configuration options for population size and generations
+
+3. Game Physics:
+   - Use consistent units and coordinate systems
+   - Separate physics logic from rendering
+   - Document collision detection approach
+
+4. Performance:
+   - Optimize render loops
+   - Use appropriate data structures for collision detection
+   - Implement frame rate controls
+   - Profile and optimize critical paths
+
+5. Testing:
+   - Test neural network convergence
+   - Validate genetic algorithm fitness improvements
+   - Verify physics calculations
+   - Test edge cases in collision detection
+
+## Development Workflow
+
+1. Version Control:
+   - Use meaningful commit messages
+   - Group related changes
+   - Keep feature branches focused
+   - Regular commits during development
+
+2. Code Review Guidelines:
+   - Verify adherence to coding standards
+   - Check performance implications
+   - Validate neural network/genetic algorithm changes
+   - Review documentation updates
+
+3. Debugging:
+   - Use console.log strategically
+   - Implement visualization tools for neural network state
+   - Add performance monitoring
+   - Include debug modes for development
+
+## Project-Specific Conventions
+
+1. Neural Network:
+   - Document network architecture in NeuralBrain.js
+   - Use consistent input/output formats
+   - Include visualization helpers
+
+2. Car Entity:
+   - Maintain clear physics properties
+   - Document sensor implementation
+   - Separate rendering from physics
+
+3. Track:
+   - Use consistent checkpoint system
+   - Document track generation/loading
+   - Include validation for track layouts
+
+4. Display:
+   - Consistent UI component styling
+   - Clear separation of rendering and logic
+   - Responsive design considerations
